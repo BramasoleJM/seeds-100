@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tri-Species Cellular World</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="sim-shell" aria-label="Simulation grid">
+        <div id="grid" class="grid"></div>
+        <div id="macroOverlay" class="macro-overlay" aria-hidden="true"></div>
+      </section>
+
+      <aside class="panel" aria-label="Simulation controls and statistics">
+        <header>
+          <h1>Tri-Species Grid</h1>
+          <p>Single-screen cellular automata prototype</p>
+        </header>
+
+        <div class="controls">
+          <button id="playPause" type="button">Play</button>
+          <button id="step" type="button">Step</button>
+          <button id="reset" type="button">Reset</button>
+          <button id="randomize" type="button">Randomize</button>
+          <button id="applyInitialSettings" type="button">Apply Initial Settings</button>
+
+          <label class="wide-row">
+            <span>Preset</span>
+            <select id="presetSelect">
+              <option value="balanced">Balanced Asymmetric Ecology Test</option>
+              <option value="noSpirit">No Spirit Control</option>
+              <option value="humanExpansion">Human Expansion Test</option>
+              <option value="humanMigration">Human Migration Test</option>
+              <option value="beastDispersion">Beast Dispersion Test</option>
+              <option value="spiritOutbreak">Spirit Outbreak Test</option>
+            </select>
+          </label>
+
+          <label class="range-row">
+            <span>Tick speed</span>
+            <input id="speed" type="range" min="100" max="800" step="20" value="180">
+          </label>
+
+          <label class="check-row">
+            <input id="movementToggle" type="checkbox" checked>
+            <span>Movement</span>
+          </label>
+
+          <label class="check-row">
+            <input id="macroOverlayToggle" type="checkbox">
+            <span>Show Macro Debug Icons</span>
+          </label>
+
+          <label class="wide-row">
+            <span>View Mode</span>
+            <select id="viewMode">
+              <option value="cell">Cell View</option>
+              <option value="macro">Macro View</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Initial Humans</span>
+            <input id="humanCount" type="number" min="0" max="300" value="24">
+          </label>
+
+          <label>
+            <span>Initial Beasts</span>
+            <input id="beastCount" type="number" min="0" max="300" value="18">
+          </label>
+
+          <label>
+            <span>Initial Spirits active units</span>
+            <input id="spiritCount" type="number" min="0" max="200" value="0">
+          </label>
+
+          <label>
+            <span>Initial FIELD patches</span>
+            <input id="fieldPatchCount" type="number" min="0" max="20" value="3">
+          </label>
+
+          <label>
+            <span>Initial WILD patches</span>
+            <input id="wildPatchCount" type="number" min="0" max="20" value="5">
+          </label>
+
+          <label>
+            <span>Initial MARK patches latent traces</span>
+            <input id="markPatchCount" type="number" min="0" max="20" value="2">
+          </label>
+
+          <label>
+            <span>Initial BLOCK count</span>
+            <input id="blockCount" type="number" min="0" max="120" value="20">
+          </label>
+
+          <label>
+            <span>Random seed</span>
+            <input id="randomSeed" type="number" min="0" max="2147483647" value="">
+          </label>
+
+          <p class="initial-note">In V0.6, Spirits can start at 0. MARK traces may still allow Spirits to manifest later.</p>
+
+          <label>
+            <span>Overcrowding</span>
+            <input id="overcrowding" type="number" min="3" max="8" value="6">
+          </label>
+
+          <label>
+            <span>Keyframe every</span>
+            <input id="keyframeEvery" type="number" min="1" max="500" value="25">
+          </label>
+
+          <button id="exportSnapshot" type="button">Export Snapshot JSON</button>
+          <button id="startRecording" type="button">Start Recording</button>
+          <button id="stopRecording" type="button">Stop Recording</button>
+          <button id="exportRecording" type="button">Export Recording JSON</button>
+          <button id="clearRecording" type="button">Clear Recording</button>
+        </div>
+
+        <section class="recording-status" aria-label="Recording status">
+          <h2>Recording</h2>
+          <dl>
+            <dt>Status</dt><dd id="recordingState">OFF</dd>
+            <dt>Recorded frames</dt><dd id="recordedFrames">0</dd>
+            <dt>Keyframes</dt><dd id="recordedKeyframes">0</dd>
+          </dl>
+        </section>
+
+        <section class="performance-status" aria-label="Performance status">
+          <h2>Status</h2>
+          <dl>
+            <dt>Playing</dt><dd id="playingState">false</dd>
+            <dt>Grid</dt><dd id="gridSize">40 x 25</dd>
+          </dl>
+          <p id="statusMessage" class="status-message"></p>
+        </section>
+
+        <section class="stats" aria-label="Statistics">
+          <h2>Stats</h2>
+          <dl id="statsList"></dl>
+        </section>
+
+        <section class="legend" aria-label="Legend">
+          <h2>Legend</h2>
+          <div class="legend-grid">
+            <span class="swatch terrain-empty"></span><span>. EMPTY</span>
+            <span class="swatch terrain-field"></span><span>F FIELD</span>
+            <span class="swatch terrain-wild"></span><span>W WILD</span>
+            <span class="swatch terrain-mark"></span><span>M MARK</span>
+            <span class="swatch terrain-border"></span><span>X BORDER</span>
+            <span class="swatch terrain-block"></span><span># BLOCK</span>
+          </div>
+          <div class="unit-legend">
+            <strong>H</strong> Human
+            <strong>B</strong> Beast
+            <strong>S</strong> Spirit
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="sim.js"></script>
+  </body>
+</html>

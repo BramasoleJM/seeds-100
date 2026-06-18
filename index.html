@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tri-Species Cellular World</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="sim-shell" aria-label="Simulation grid">
+        <div id="grid" class="grid"></div>
+        <div id="macroOverlay" class="macro-overlay" aria-hidden="true"></div>
+        <div id="semanticTagInfoPanel" class="semantic-tag-info-panel" aria-hidden="true"></div>
+      </section>
+
+      <aside class="panel" aria-label="Simulation controls and statistics">
+        <header>
+          <h1>Tri-Species Grid</h1>
+          <p>Single-screen cellular automata prototype</p>
+        </header>
+
+        <div class="controls">
+          <button id="playPause" type="button">Play</button>
+          <button id="step" type="button">Step</button>
+          <button id="reset" type="button">Reset</button>
+          <button id="randomize" type="button">Randomize</button>
+
+          <label class="range-row">
+            <span>Tick speed</span>
+            <input id="speed" type="range" min="100" max="800" step="20" value="180">
+          </label>
+
+          <label class="check-row">
+            <input id="movementToggle" type="checkbox" checked>
+            <span>Movement</span>
+          </label>
+
+          <label class="wide-row">
+            <span>View Mode</span>
+            <select id="viewMode">
+              <option value="cell">Cell View</option>
+              <option value="macro">Macro View</option>
+              <option value="substrateMacro">Substrate + Macro View</option>
+              <option value="explore">Explore View</option>
+            </select>
+          </label>
+          <p class="wide-row explore-help">Explore: WASD move, Space inspect, E sleep/wake</p>
+
+          <label class="check-row wide-row lineage-control">
+            <input id="lineageToggle" type="checkbox" checked>
+            <span>Show Human Lineage</span>
+          </label>
+
+          <label class="check-row wide-row semantic-tags-control">
+            <input id="macroOverlayToggle" type="checkbox" checked>
+            <span>Show Semantic Tags</span>
+          </label>
+
+          <label class="wide-row">
+            <span>Runtime Intervention</span>
+            <select id="interventionUnit">
+              <option value="">Off</option>
+              <option value="H">Place Human</option>
+              <option value="B">Place Beast</option>
+              <option value="S">Place Spirit</option>
+            </select>
+          </label>
+        </div>
+
+        <details class="panel-group map-seed-panel">
+          <summary>Map Seed Editor</summary>
+          <div class="controls">
+            <label class="wide-row">
+              <span>Brush</span>
+              <select id="mapSeedBrush">
+                <option value="">Off</option>
+                <option value="H">Human</option>
+                <option value="B">Beast</option>
+                <option value="S">Spirit</option>
+                <option value="mountain">Mountain</option>
+                <option value="river">River</option>
+                <option value="spring">Spring</option>
+                <option value="rot_source">Rot Source</option>
+                <option value="great_forest">Great Forest</option>
+                <option value="monument">Monument</option>
+                <option value="erase">Erase</option>
+              </select>
+            </label>
+            <button id="generateMapSeedPreset" type="button">Generate Random Preset</button>
+            <button id="clearMapSeed" type="button">Clear Seed</button>
+            <button id="applyMapSeed" type="button">Apply JSON Seed</button>
+            <button id="resetFromMapSeed" type="button">Reset From Seed</button>
+            <button id="importMapSeed" type="button">Load Current Seed JSON</button>
+            <button id="exportMapSeed" type="button">Export Seed JSON</button>
+            <label class="wide-row seed-json-row">
+              <span>Seed JSON</span>
+              <textarea id="mapSeedJson" spellcheck="false"></textarea>
+            </label>
+          </div>
+        </details>
+
+        <section class="performance-status" aria-label="Performance status">
+          <h2>Status</h2>
+          <dl>
+            <dt>Playing</dt><dd id="playingState">false</dd>
+            <dt>Grid</dt><dd id="gridSize">40 x 25</dd>
+          </dl>
+          <p id="statusMessage" class="status-message"></p>
+        </section>
+
+        <section class="stats" aria-label="Statistics">
+          <h2>Stats</h2>
+          <dl id="statsList"></dl>
+        </section>
+
+        <section id="lineageStatus" class="lineage-status" aria-label="Human Lineage status">
+          <h2>Human Lineage</h2>
+          <dl>
+            <dt>Lineages</dt><dd id="lineageTotal">0</dd>
+            <dt>Active</dt><dd id="lineageActive">0</dd>
+            <dt>Collapsed</dt><dd id="lineageCollapsed">0</dd>
+            <dt>Descendants</dt><dd id="lineageDescendants">0</dd>
+            <dt>Dominant</dt><dd id="lineageDominant">-</dd>
+            <dt>Recent Event</dt><dd id="lineageRecentEvent">-</dd>
+          </dl>
+        </section>
+
+        <section id="polityStatus" class="lineage-status" aria-label="Human Polity status">
+          <h2>Human Polity</h2>
+          <dl>
+            <dt>Polities</dt><dd id="polityTotal">0</dd>
+            <dt>Active</dt><dd id="polityActive">0</dd>
+            <dt>Pressured</dt><dd id="polityPressured">0</dd>
+            <dt>Seatless</dt><dd id="politySeatless">0</dd>
+            <dt>Villages</dt><dd id="polityVillages">0</dd>
+            <dt>Outposts</dt><dd id="polityOutposts">0</dd>
+            <dt>Dominant</dt><dd id="polityDominant">-</dd>
+            <dt>Recent Event</dt><dd id="polityRecentEvent">-</dd>
+          </dl>
+        </section>
+
+        <details class="panel-group">
+          <summary>Initial Settings</summary>
+          <div class="controls">
+            <button id="applyInitialSettings" type="button">Apply Initial Settings</button>
+
+            <label class="wide-row">
+              <span>Preset</span>
+              <select id="presetSelect">
+                <option value="balanced">Balanced Asymmetric Ecology Test</option>
+                <option value="noSpirit">No Spirit Control</option>
+                <option value="humanExpansion">Human Expansion Test</option>
+                <option value="humanMigration">Human Migration Test</option>
+                <option value="beastDispersion">Beast Dispersion Test</option>
+                <option value="spiritOutbreak">Spirit Outbreak Test</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Initial Humans</span>
+              <input id="humanCount" type="number" min="0" max="300" value="24">
+            </label>
+
+            <label>
+              <span>Initial Beasts</span>
+              <input id="beastCount" type="number" min="0" max="300" value="18">
+            </label>
+
+            <label>
+              <span>Initial Spirits active units</span>
+              <input id="spiritCount" type="number" min="0" max="200" value="0">
+            </label>
+
+            <label>
+              <span>Initial FIELD patches</span>
+              <input id="fieldPatchCount" type="number" min="0" max="20" value="3">
+            </label>
+
+            <label>
+              <span>Initial WILD patches</span>
+              <input id="wildPatchCount" type="number" min="0" max="20" value="5">
+            </label>
+
+            <label>
+              <span>Initial MARK patches latent traces</span>
+              <input id="markPatchCount" type="number" min="0" max="20" value="2">
+            </label>
+
+            <label>
+              <span>Initial BLOCK count</span>
+              <input id="blockCount" type="number" min="0" max="120" value="20">
+            </label>
+
+            <label>
+              <span>Random seed</span>
+              <input id="randomSeed" type="number" min="0" max="2147483647" value="">
+            </label>
+
+            <p class="initial-note">In V0.6, Spirits can start at 0. MARK traces may still allow Spirits to manifest later.</p>
+          </div>
+        </details>
+
+        <details class="panel-group">
+          <summary>Advanced / Debug</summary>
+          <div class="controls">
+            <label>
+            <span>Overcrowding</span>
+            <input id="overcrowding" type="number" min="3" max="8" value="6">
+            </label>
+
+            <label>
+            <span>Keyframe every</span>
+            <input id="keyframeEvery" type="number" min="1" max="500" value="25">
+            </label>
+
+            <button id="exportSnapshot" type="button">Export Snapshot JSON</button>
+          </div>
+        </details>
+
+        <details class="panel-group recording-status" aria-label="Recording status">
+          <summary>Recording</summary>
+          <div class="controls">
+            <button id="startRecording" type="button">Start Recording</button>
+            <button id="stopRecording" type="button">Stop Recording</button>
+            <button id="exportRecording" type="button">Export Recording JSON</button>
+            <button id="clearRecording" type="button">Clear Recording</button>
+          </div>
+          <dl>
+            <dt>Status</dt><dd id="recordingState">OFF</dd>
+            <dt>Recorded frames</dt><dd id="recordedFrames">0</dd>
+            <dt>Keyframes</dt><dd id="recordedKeyframes">0</dd>
+          </dl>
+        </details>
+
+        <details class="panel-group recording-status" aria-label="Macro timeline status">
+          <summary>Macro Timeline</summary>
+          <div class="controls">
+            <button id="startMacroTimeline" type="button">Start Macro Timeline</button>
+            <button id="stopMacroTimeline" type="button">Stop Macro Timeline</button>
+            <button id="exportMacroTimeline" type="button">Export Macro Timeline JSON</button>
+            <button id="clearMacroTimeline" type="button">Clear Macro Timeline</button>
+          </div>
+          <dl>
+            <dt>Status</dt><dd id="macroTimelineState">OFF</dd>
+            <dt>Frames</dt><dd id="macroTimelineFrames">0</dd>
+            <dt>Analysis frames</dt><dd id="macroTimelineAnalysisFrames">0</dd>
+          </dl>
+        </details>
+
+        <details class="panel-group legend" aria-label="Legend">
+          <summary>Legend</summary>
+          <h3>Population evolution</h3>
+          <div class="legend-grid">
+            <span class="swatch population-human-core"></span><span>Human settlement shape core / body / memory</span>
+            <span class="swatch population-beast-core"></span><span>Beast wild range core / body / memory</span>
+            <span class="swatch population-spirit-core"></span><span>Spirit corrosion core / scar / memory</span>
+          </div>
+          <h3>Human Lineage</h3>
+          <div class="legend-grid">
+            <span class="swatch lineage-human-origin"></span><span>origin marker</span>
+            <span class="swatch lineage-human-current"></span><span>current dominant lineage centroid</span>
+            <span class="swatch lineage-human-path"></span><span>recent centroid path / descendant link</span>
+            <span class="swatch lineage-human-memory"></span><span>faded Human settlement memory</span>
+          </div>
+          <h3>Points of Interest</h3>
+          <div class="legend-grid">
+            <span class="swatch poi-monument"></span><span>monument: Human/FIELD memory support</span>
+            <span class="swatch poi-great-forest"></span><span>great forest: Beast/WILD habitat and origin</span>
+            <span class="swatch poi-rot-source"></span><span>rot source: core / inner ring / contested outer ring</span>
+            <span class="swatch poi-spring"></span><span>spring: neutral fertility amplifier; Spring center is a blocked source</span>
+          </div>
+          <h3>Terrain material</h3>
+          <div class="legend-grid">
+            <span class="swatch terrain-empty"></span><span>. EMPTY low-level ground</span>
+            <span class="swatch terrain-field"></span><span>F FIELD muted in Macro View</span>
+            <span class="swatch terrain-wild"></span><span>W WILD muted in Macro View</span>
+            <span class="swatch terrain-mark"></span><span>M MARK/scar texture</span>
+          </div>
+          <h3>Geography / Regional substrate</h3>
+          <div class="legend-grid">
+            <span class="swatch region-basin"></span><span>basin</span>
+            <span class="swatch region-refuge"></span><span>refuge</span>
+            <span class="swatch region-hollow"></span><span>hollow</span>
+            <span class="swatch region-none"></span><span>ordinary; mainly Substrate + Macro View</span>
+          </div>
+          <h3>Macro aids</h3>
+          <div class="legend-grid">
+            <span class="swatch terrain-border"></span><span>X BORDER</span>
+            <span class="swatch terrain-block"></span><span># BLOCK</span>
+            <span class="swatch swatch-frontier"></span><span>frontier</span>
+            <span class="swatch swatch-route"></span><span>route aid, not a POI/resource</span>
+          </div>
+          <h3>Debug icons</h3>
+          <div class="legend-grid">
+            <span>H+ / H core</span><span>settlement debug marker</span>
+            <span>W range</span><span>Beast recovery debug marker</span>
+            <span>S wave / S scar</span><span>Spirit debug marker</span>
+            <span>route / edge</span><span>migration or frontier debug marker</span>
+          </div>
+          <div class="unit-legend">
+            <strong>H</strong> Human
+            <strong>B</strong> Beast
+            <strong>S</strong> Spirit
+          </div>
+        </details>
+      </aside>
+    </main>
+
+    <script src="sim.js"></script>
+  </body>
+</html>
