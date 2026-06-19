@@ -4856,12 +4856,78 @@ Strongest examples and non-Human examples are capped for compact export readabil
 
 ---
 
+## 72.4 V0.14B.2 Explore / River / Proto-Culture Audit Usability
+
+V0.14B.2 is a usability and audit tooling patch.
+
+It does not change Human, Beast, or Spirit lifecycle, conflict, conversion, reproduction, terrain rewriting, core fertility rules, POI effects, terrain decay, grid size, terrain types, unit types, tick order, semantic trait derivation, place archetype priority, proto-culture hint scoring, proto-culture memory update rules, Human-related proto-culture gates, or wake report sparsity.
+
+Explore blockers:
+
+```text
+Explore movement is blocked by visible BLOCK/mountain cells.
+Explore movement is blocked by visible BORDER cells.
+Explore movement is blocked by visible river map-feature cells.
+Explore movement is blocked by hard POI centers, currently Spring centers.
+H/B/S units do not block the Explore observer.
+Explore movement remains continuous and may slide along obstacle edges when one axis is passable.
+```
+
+BLOCK / mountain visual priority:
+
+```text
+BLOCK cells render with a black base in Cell, Macro, Substrate Macro, and Explore views.
+POI influence, macro overlays, fertility tint, and region/material tint must not make BLOCK cells look passable.
+```
+
+Generated river features:
+
+```text
+Generated/random worlds create mapFeatures.rivers.
+Generated rivers are continuous-ish paths.
+Generated rivers avoid BLOCK/mountains where practical.
+Generated rivers remain map features, not WATER terrain.
+Generated rivers continue to block H/B/S movement and Explore movement through the existing blocker helpers.
+Generated rivers continue to use existing river fertility restoration.
+Initial generated units are not placed on generated river cells.
+```
+
+Lightweight proto-culture export:
+
+```text
+Recording controls include Export Proto-Culture Summary JSON.
+The lightweight export has type tri_species_proto_culture_summary and version 0.14B.2.
+It includes tick, sourceRecordingRange, placeMemory.protoCultureSummary, and compact proto-culture anchors.
+It excludes full frames, keyframes, terrain rows, unit rows, and full snapshots.
+It does not mutate placeMemory.
+```
+
+Multi-seed audit helper:
+
+```text
+runProtoCultureSummaryAuditForSeedsForTest runs compact deterministic seed audits for tests/tools.
+The helper returns per-run protoCultureSummary, strongest examples by hint, final counts, and compact inspection logs.
+The helper returns aggregate primary/stable/active hint counts and capped strongest examples.
+The helper does not export full recordings.
+The helper restores app state after running where practical.
+```
+
+Known simplifications:
+
+```text
+Explore collision uses a small continuous player-radius sample against visible grid blockers.
+Generated rivers use a simple deterministic vertical meander with local mountain avoidance rather than full pathfinding.
+The multi-seed audit helper is a test/audit hook first; it inspects available Human-related targets and POIs on a fixed cadence.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
 Date: 2026-06-19
-Status: V0.14B.1 Proto-Culture Readability Audit implemented
+Status: V0.14B.2 Explore / River / Proto-Culture Audit Usability implemented
 ```
 
 Current version split:
@@ -4917,6 +4983,7 @@ Semantic place layer: TRI_SPECIES_WORLD_SIM_V0.14A_SEMANTIC_PLACE_LAYER
 Semantic place tuning: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
 Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
 Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
+Explore / river / proto-culture audit usability: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
 ```
 
 V0.8.3 notes:

@@ -25,11 +25,12 @@ Future notes: validate compactly; do not make it a multi-screen map here.
 ## MapFeature: River
 
 Lives in: `mapFeatures.rivers`.
-Created by: map seed rivers and river brush.
+Created by: map seed rivers, river brush, editable random seed preset, and generated/random world initialization.
 Read by: movement blockers, Explore blockers, rendering, fertility restore, place snapshots.
 Mutates simulation: yes through existing blocker and fertility restore rules.
 Observer-only: no.
 Export shape: compact `{ x, y }` river cells.
+V0.14B.2 note: generated rivers are continuous-ish paths that avoid BLOCK/mountains where practical and remain map features, not terrain.
 Future notes: river is not terrain and not a unit.
 
 ## POI
@@ -185,6 +186,8 @@ Read by: snapshot/recording audit consumers.
 Mutates simulation: no.
 Observer-only: yes.
 Export shape: version, anchor totals, hint count maps, anchor type count maps, capped non-Human-labeled examples, and capped strongest examples by allowed hint id.
+V0.14B.2 lightweight export: `createProtoCultureSummaryExport` emits `type: tri_species_proto_culture_summary`, version `0.14B.2`, tick/range metadata, `protoCultureSummary`, and capped `compactAnchors` without frames, keyframes, full snapshots, terrain rows, or unit rows.
+V0.14B.2 audit helper: `runProtoCultureSummaryAuditForSeedsForTest` returns compact per-seed summaries and aggregate hint counts/examples for tests/tools.
 Future notes: keep compact and deterministic; do not use as live state or gameplay input.
 
 ## PlayerObserver

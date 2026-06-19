@@ -11,6 +11,7 @@ const EXPLORE_SLEEP_TICK_MS = 140;
 const EXPLORE_SLEEP_TICKS_PER_REST = 30;
 const MAP_SEED_VERSION = "0.13.1";
 const PLACE_MEMORY_VERSION = "0.14B";
+const PROTO_CULTURE_EXPORT_VERSION = "0.14B.2";
 const PLACE_STATE_STATUSES = new Set(["emerging", "active", "expanding", "shrinking", "contested", "corrupted", "recovering", "abandoned", "remnant", "stable"]);
 const PLACE_STATE_TRENDS = new Set(["growing", "declining", "holding", "unstable", "silent"]);
 const PLACE_PRESSURES = new Set(["human", "beast", "spirit", "rot", "water", "forest", "mixed", "none"]);
@@ -315,6 +316,7 @@ const exportSnapshotBtn = document.getElementById("exportSnapshot");
 const startRecordingBtn = document.getElementById("startRecording");
 const stopRecordingBtn = document.getElementById("stopRecording");
 const exportRecordingBtn = document.getElementById("exportRecording");
+const exportProtoCultureSummaryBtn = document.getElementById("exportProtoCultureSummary");
 const clearRecordingBtn = document.getElementById("clearRecording");
 const startMacroTimelineBtn = document.getElementById("startMacroTimeline");
 const stopMacroTimelineBtn = document.getElementById("stopMacroTimeline");
@@ -2700,6 +2702,19 @@ function isCellBlockedForMovement(source, x, y, pois = worldPOIs) {
   return terrain === TERRAIN.BLOCK || terrain === TERRAIN.BORDER || isPOIHardBlocker(x, y, pois) || isRiverCell(x, y);
 }
 
+function getExploreCellBlockerReason(source, x, y, pois = worldPOIs) {
+  const cellX = Math.floor(x);
+  const cellY = Math.floor(y);
+  if (!inBounds(cellX, cellY)) return "edge";
+  const cell = source?.[cellY]?.[cellX];
+  if (!cell) return "edge";
+  if (cell.terrain === TERRAIN.BLOCK) return "BLOCK";
+  if (cell.terrain === TERRAIN.BORDER) return "BORDER";
+  if (isRiverCell(cellX, cellY)) return "river";
+  if (isPOIHardBlocker(cellX, cellY, pois)) return "spring";
+  return null;
+}
+
 function createDefaultPlayerObserver() {
   return {
     x: Math.floor(WIDTH / 2),
@@ -2713,12 +2728,7 @@ function createDefaultPlayerObserver() {
 }
 
 function isExploreCellPassable(source, x, y, pois = worldPOIs) {
-  const cellX = Math.floor(x);
-  const cellY = Math.floor(y);
-  if (!inBounds(cellX, cellY)) return false;
-  if (!source?.[cellY]?.[cellX]) return false;
-  const terrain = source[cellY][cellX].terrain;
-  return terrain !== TERRAIN.BLOCK && terrain !== TERRAIN.BORDER && !isPOIHardBlocker(cellX, cellY, pois) && !isRiverCell(cellX, cellY);
+  return getExploreCellBlockerReason(source, x, y, pois) === null;
 }
 
 function createPlayerObserver(source = world, pois = worldPOIs) {
@@ -2762,7 +2772,7 @@ function collidesExplorePosition(source, x, y, pois = worldPOIs) {
     { x: x - EXPLORE_PLAYER_RADIUS, y: y + EXPLORE_PLAYER_RADIUS },
     { x: x + EXPLORE_PLAYER_RADIUS, y: y + EXPLORE_PLAYER_RADIUS },
   ];
-  return samples.some((point) => !isExploreCellPassable(source, Math.floor(point.x), Math.floor(point.y), pois));
+  return samples.some((point) => !isExploreCellPassable(source, point.x, point.y, pois));
 }
 
 function updatePlayerObserverContinuous(deltaSeconds, input = {}, source = world, pois = worldPOIs) {
@@ -2874,13 +2884,16 @@ function getExploreViewportRenderModel(player = ensurePlayerObserver(), source =
     const macroClass = macroMasks.cellClasses[entry.worldY]?.[entry.worldX] || "";
     const poiCenter = worldPOIs.some((poi) => poi.state === "active" && poi.x === entry.worldX && poi.y === entry.worldY);
     const riverClass = isRiverCell(entry.worldX, entry.worldY) ? " map-river" : "";
+    const blockerReason = getExploreCellBlockerReason(source, entry.worldX, entry.worldY, worldPOIs);
+    const blockerClass = blockerReason ? ` explore-blocker explore-blocker-${blockerReason.toLowerCase()}` : "";
     return {
       ...entry,
       terrain: cell.terrain,
       unit: cell.unit || "",
       fertility: cell.fertility || 0,
       macroClass,
-      className: `cell ${terrainClass(cell.terrain)} ${fertilityClass(cell.fertility)}${riverClass}${macroClass ? ` ${macroClass}` : ""}${poiCenter ? " poi-center" : ""}`,
+      blockerReason,
+      className: `cell ${terrainClass(cell.terrain)} ${fertilityClass(cell.fertility)}${riverClass}${macroClass ? ` ${macroClass}` : ""}${poiCenter ? " poi-center" : ""}${blockerClass}`,
     };
   });
   return {
@@ -4026,6 +4039,41 @@ function addInitialBlocks(target, count, rng) {
   }
 }
 
+function generateRiverPath(rng, options = {}) {
+  const source = options.source || null;
+  const blockedKeys = new Set((options.blockedPoints || []).map((point) => pointKey(point.x, point.y)));
+  const startY = options.startY ?? 1;
+  const endY = options.endY ?? HEIGHT - 2;
+  const minX = options.minX ?? 2;
+  const maxX = options.maxX ?? WIDTH - 3;
+  let riverX = options.startX ?? randomInt(rng, Math.max(minX, 8), Math.min(maxX, WIDTH - 9));
+  const path = [];
+  const used = new Set();
+
+  for (let y = startY; y <= endY; y += 1) {
+    riverX = Math.max(minX, Math.min(maxX, riverX + randomInt(rng, -1, 1)));
+    const offsets = [0, -1, 1, -2, 2, -3, 3, -4, 4];
+    let chosenX = riverX;
+    for (const offset of offsets) {
+      const candidateX = Math.max(minX, Math.min(maxX, riverX + offset));
+      const key = pointKey(candidateX, y);
+      const isBlocked = blockedKeys.has(key) || source?.[y]?.[candidateX]?.terrain === TERRAIN.BLOCK;
+      if (!isBlocked) {
+        chosenX = candidateX;
+        break;
+      }
+    }
+    riverX = chosenX;
+    const key = pointKey(chosenX, y);
+    if (!used.has(key)) {
+      used.add(key);
+      path.push({ x: chosenX, y });
+    }
+  }
+
+  return normalizePointList(path);
+}
+
 function shuffledNeighborsNear(center, radius, rng) {
   const cells = [];
   for (let y = Math.max(0, center.y - radius); y <= Math.min(HEIGHT - 1, center.y + radius); y += 1) {
@@ -4044,6 +4092,7 @@ function placeInitialUnits(target, unit, count, centers, options, rng) {
   const fertilityMin = options.fertilityMin ?? 45;
   const fertilityMax = options.fertilityMax ?? 70;
   const useCenters = centers.length > 0 ? centers : choosePatchCenters(Math.max(1, Math.ceil(count / 6)), rng);
+  const blockedUnitPlacementKeys = new Set((options.blockedPoints || []).map((point) => pointKey(point.x, point.y)));
 
   while (placed < count) {
     let placedThisPass = false;
@@ -4051,6 +4100,7 @@ function placeInitialUnits(target, unit, count, centers, options, rng) {
       if (placed >= count) break;
       const candidates = shuffledNeighborsNear(center, options.radius || 4, rng);
       for (const candidate of candidates) {
+        if (blockedUnitPlacementKeys.has(pointKey(candidate.x, candidate.y))) continue;
         const cell = target[candidate.y][candidate.x];
         if (cell.unit || cell.terrain === TERRAIN.BLOCK) continue;
         if (unit === UNIT.SPIRIT && cell.terrain !== TERRAIN.MARK) {
@@ -4211,6 +4261,7 @@ function createInitialWorld(settings = getInitialSettings()) {
   }
   addInitialBlocks(next, settings.initialBlockCount, rng);
   updateRegionalSubstrateBlockCounts(next, regionalSubstrate);
+  const generatedRivers = generateRiverPath(rng, { source: next });
 
   placeInitialUnits(next, UNIT.HUMAN, settings.initialHumans, fieldCenters, {
     role: "normal",
@@ -4219,6 +4270,7 @@ function createInitialWorld(settings = getInitialSettings()) {
     fertilityMin: 2,
     fertilityMax: 3,
     label: "Humans",
+    blockedPoints: generatedRivers,
   }, rng);
   placeInitialUnits(next, UNIT.BEAST, settings.initialBeasts, wildCenters, {
     role: "pack",
@@ -4227,6 +4279,7 @@ function createInitialWorld(settings = getInitialSettings()) {
     fertilityMin: 3,
     fertilityMax: 4,
     label: "Beasts",
+    blockedPoints: generatedRivers,
   }, rng);
 
   let spiritCenters = markCenters;
@@ -4241,11 +4294,37 @@ function createInitialWorld(settings = getInitialSettings()) {
     fertilityMin: 2,
     fertilityMax: 3,
     label: "Spirits",
+    blockedPoints: generatedRivers,
   }, rng);
 
   currentInitialSettings = { ...settings };
   next.regionalSubstrate = cloneRegionalSubstrateLayout(regionalSubstrate);
   next.pointsOfInterest = createInitialPOIs(next);
+  const generatedMountains = [];
+  for (let y = 0; y < HEIGHT; y += 1) {
+    for (let x = 0; x < WIDTH; x += 1) {
+      if (next[y][x].terrain === TERRAIN.BLOCK) generatedMountains.push({ x, y });
+    }
+  }
+  next.mapFeatures = { rivers: generatedRivers.map((point) => ({ ...point })) };
+  next.mapSeed = normalizeMapSeed({
+    version: MAP_SEED_VERSION,
+    name: `Generated world ${settings.randomSeed}`,
+    width: WIDTH,
+    height: HEIGHT,
+    units: [],
+    mountains: generatedMountains,
+    rivers: generatedRivers,
+    pois: next.pointsOfInterest.map((poi) => ({
+      id: poi.id,
+      type: poi.type,
+      x: poi.x,
+      y: poi.y,
+      radius: poi.radius,
+      state: poi.state,
+      strength: poi.strength,
+    })),
+  });
   return next;
 }
 
@@ -9753,6 +9832,288 @@ function compactPlaceMemory() {
   }));
 }
 
+function compactProtoCultureSignals(signals = {}) {
+  const entries = Object.entries(signals || {})
+    .filter(([id]) => Object.values(PROTO_CULTURE_HINTS).includes(id))
+    .sort((a, b) => (b[1]?.score || 0) - (a[1]?.score || 0) || a[0].localeCompare(b[0]))
+    .slice(0, 8);
+  return Object.fromEntries(entries.map(([id, signal]) => [id, {
+    score: Number(Math.min(1, Math.max(0, signal?.score || 0)).toFixed(2)),
+    samples: Math.max(0, Math.floor(signal?.samples || 0)),
+    firstSeenTick: signal?.firstSeenTick ?? null,
+    lastSeenTick: signal?.lastSeenTick ?? null,
+    sourceTraits: compactProtoCultureSourceTraits(signal?.sourceTraits || []),
+  }]));
+}
+
+function compactProtoCultureAnchor(anchor = {}) {
+  const memory = anchor.protoCultureMemory || {};
+  return {
+    anchorId: anchor.id || null,
+    anchorType: anchor.type || anchor.sourceRef?.kind || "place",
+    displayName: anchor.displayName || anchor.type || "place",
+    position: anchor.position ? { x: anchor.position.x, y: anchor.position.y } : { x: anchor.currentSnapshot?.position?.x ?? null, y: anchor.currentSnapshot?.position?.y ?? null },
+    placeArchetype: anchor.currentSnapshot?.placeArchetype || null,
+    primaryHint: memory.primaryHint || null,
+    stableHints: Array.isArray(memory.stableHints) ? memory.stableHints.slice(0, 8) : [],
+    activeHints: Array.isArray(memory.activeHints) ? memory.activeHints.slice(0, 8) : [],
+    signals: compactProtoCultureSignals(memory.signals || {}),
+    currentHints: Array.isArray(anchor.currentSnapshot?.protoCultureHints)
+      ? anchor.currentSnapshot.protoCultureHints.slice(0, 8).map(normalizeProtoCultureHint).filter(Boolean)
+      : [],
+  };
+}
+
+function createProtoCultureSummaryExport() {
+  const compactAnchors = (placeMemory.anchors || [])
+    .filter((anchor) => hasAnchorProtoCulture(anchor))
+    .sort((a, b) => strongestProtoCultureScore(b) - strongestProtoCultureScore(a) || String(a.id || "").localeCompare(String(b.id || "")))
+    .slice(0, 48)
+    .map(compactProtoCultureAnchor);
+  return JSON.parse(JSON.stringify({
+    type: "tri_species_proto_culture_summary",
+    version: PROTO_CULTURE_EXPORT_VERSION,
+    createdAt: new Date().toISOString(),
+    tick,
+    sourceRecordingRange: {
+      startTick: recording.startTick ?? tick,
+      endTick: recording.endTick ?? tick,
+    },
+    placeMemory: {
+      protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
+      compactAnchors,
+    },
+  }));
+}
+
+function exportProtoCultureSummaryJson() {
+  const data = createProtoCultureSummaryExport();
+  downloadJson(
+    `tri_species_proto_culture_summary_tick_${padTick(data.tick)}.json`,
+    data
+  );
+}
+
+function mergeCountObjects(target, source) {
+  for (const [key, value] of Object.entries(source || {})) {
+    target[key] = (target[key] || 0) + value;
+  }
+}
+
+function aggregateStrongestExamples(target, source) {
+  for (const id of Object.values(PROTO_CULTURE_HINTS)) {
+    const combined = [...(target[id] || []), ...(source?.[id] || [])];
+    target[id] = combined
+      .sort((a, b) => (b.score || 0) - (a.score || 0) ||
+        Number(b.primaryHint === id) - Number(a.primaryHint === id) ||
+        Number(b.stable) - Number(a.stable) ||
+        String(a.anchorId || "").localeCompare(String(b.anchorId || "")))
+      .slice(0, 5);
+  }
+}
+
+function humanFallbackAuditTargets(source = world) {
+  const cells = [];
+  for (let y = 0; y < HEIGHT; y += 1) {
+    for (let x = 0; x < WIDTH; x += 1) {
+      if (source[y][x].unit === UNIT.HUMAN) cells.push({ x, y });
+    }
+  }
+  if (!cells.length) return [];
+  const cx = Math.round(cells.reduce((sum, cell) => sum + cell.x, 0) / cells.length);
+  const cy = Math.round(cells.reduce((sum, cell) => sum + cell.y, 0) / cells.length);
+  return [{
+    type: "polity_village",
+    label: "H village",
+    x: cx,
+    y: cy,
+    source: "audit",
+    sourceId: `audit_human_cluster_${cx}_${cy}`,
+    category: "lineage",
+    state: "active",
+    support: cells.length,
+    area: cells.length,
+  }];
+}
+
+function collectProtoCultureAuditTargets(source = world, maxTargets = 24) {
+  refreshMacroDisplayFrame({ force: true, mode: "macro" });
+  const tags = createSemanticTags(macroDisplayWorld || source, { mode: "macro" })
+    .filter((tag) => ["H village", "H seat", "H pressured seat", "H old seat", "H outpost", "H remnant", "H domain"].includes(tag.label));
+  const poiTargets = (worldPOIs || [])
+    .filter((poi) => poi.state !== "inactive")
+    .map(poiToSemanticTag);
+  const targets = dedupeExploreTargets([
+    ...humanVillageExploreTargets(),
+    ...humanSeatExploreTargets(),
+    ...humanOutpostExploreTargets(),
+    ...tags,
+    ...poiTargets,
+    ...humanFallbackAuditTargets(source),
+  ]);
+  return targets
+    .sort((a, b) => exploreInteractionPriority(a) - exploreInteractionPriority(b) ||
+      String(a.sourceId || "").localeCompare(String(b.sourceId || "")) ||
+      (a.y - b.y) ||
+      (a.x - b.x))
+    .slice(0, Math.max(1, maxTargets));
+}
+
+function inspectProtoCultureAuditTargets(source = world, maxTargets = 24) {
+  const targets = collectProtoCultureAuditTargets(source, maxTargets);
+  const inspected = [];
+  for (const target of targets) {
+    const anchor = inspectPlaceTarget(target, source);
+    if (!anchor) continue;
+    inspected.push({
+      anchorId: anchor.id,
+      anchorType: anchor.type,
+      displayName: anchor.displayName,
+      primaryHint: anchor.protoCultureMemory?.primaryHint || null,
+      activeHints: Array.isArray(anchor.protoCultureMemory?.activeHints) ? anchor.protoCultureMemory.activeHints.slice(0, 6) : [],
+      stableHints: Array.isArray(anchor.protoCultureMemory?.stableHints) ? anchor.protoCultureMemory.stableHints.slice(0, 6) : [],
+    });
+  }
+  return inspected;
+}
+
+function runWithSeededMathRandom(seed, fn) {
+  const originalRandom = Math.random;
+  const rng = createSeededRandom(seed || 1);
+  Math.random = rng;
+  try {
+    return fn();
+  } finally {
+    Math.random = originalRandom;
+  }
+}
+
+function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
+  const seeds = Array.isArray(options.seeds) && options.seeds.length ? options.seeds.map((seed) => Math.floor(seed)) : [31401, 31402, 31403];
+  const ticksToRun = Math.max(0, Math.floor(options.ticks ?? 200));
+  const inspectEvery = Math.max(1, Math.floor(options.inspectEvery ?? 25));
+  const maxTargets = Math.max(1, Math.floor(options.maxTargets ?? 24));
+  const savedState = {
+    tick,
+    world: cloneWorld(world, { includeMetadata: true }),
+    currentInitialWorld: currentInitialWorld ? cloneWorld(currentInitialWorld, { includeMetadata: true }) : null,
+    currentInitialSettings: currentInitialSettings ? { ...currentInitialSettings } : null,
+    activeMapSeed: normalizeMapSeed(activeMapSeed || createDefaultMapSeed()),
+    mapFeatures: cloneMapFeatures(),
+    worldPOIs: clonePOIs(),
+    placeMemory: JSON.parse(JSON.stringify(placeMemory)),
+    recording: JSON.parse(JSON.stringify(recording)),
+    macroTimeline: JSON.parse(JSON.stringify(macroTimeline)),
+    currentRegionalSubstrate: cloneRegionalSubstrateLayout(),
+    macroWorld: cloneMacroWorldSnapshot(macroWorld),
+    macroDisplayWorld: macroDisplayWorld ? cloneWorld(macroDisplayWorld, { includeMetadata: true }) : null,
+    macroDisplayFrame: macroDisplayFrame ? JSON.parse(JSON.stringify(macroDisplayFrame)) : null,
+    macroFrames: JSON.parse(JSON.stringify(macroFrames)),
+    macroHistory: JSON.parse(JSON.stringify(macroHistory)),
+    macroRecentFrames: JSON.parse(JSON.stringify(macroRecentFrames)),
+    macroMemory: JSON.parse(JSON.stringify(macroMemory)),
+    humanLineageMemory: JSON.parse(JSON.stringify(humanLineageMemory)),
+    humanPolityMemory: JSON.parse(JSON.stringify(humanPolityMemory)),
+    randomSeedInputValue: randomSeedInput?.value,
+  };
+
+  const runs = [];
+  const aggregate = {
+    runCount: seeds.length,
+    primaryHintCounts: {},
+    stableHintCounts: {},
+    activeHintCounts: {},
+    anchorTypeWithHintCounts: {},
+    nonHumanAnchorWithHints: 0,
+    strongestExamplesByHint: Object.fromEntries(Object.values(PROTO_CULTURE_HINTS).map((id) => [id, []])),
+  };
+
+  try {
+    for (const seed of seeds) {
+      const run = runWithSeededMathRandom(seed, () => {
+        const settings = { ...getInitialSettings(), randomSeed: seed };
+        if (randomSeedInput) randomSeedInput.value = String(seed);
+        const nextWorld = createInitialWorld(settings);
+        currentInitialWorld = cloneWorld(nextWorld, { includeMetadata: true });
+        currentInitialSettings = { ...settings };
+        resetWorld(currentInitialWorld);
+        placeMemory = createEmptyPlaceMemory();
+        recording = createEmptyRecording();
+        const startTick = tick;
+        const inspectionLog = [];
+
+        for (let elapsed = 0; elapsed <= ticksToRun; elapsed += 1) {
+          if (elapsed % inspectEvery === 0 || elapsed === ticksToRun) {
+            const inspected = inspectProtoCultureAuditTargets(world, maxTargets);
+            inspectionLog.push({
+              tick,
+              inspected: inspected.length,
+              anchorsWithHints: inspected.filter((item) => item.primaryHint || item.activeHints.length || item.stableHints.length).length,
+            });
+          }
+          if (elapsed < ticksToRun) stepWorld();
+        }
+
+        const protoCultureSummary = summarizeProtoCultureForPlaceMemory(placeMemory);
+        return {
+          seed,
+          startTick,
+          endTick: tick,
+          inspectedAnchors: placeMemory.anchors.length,
+          protoCultureSummary,
+          strongestExamplesByHint: protoCultureSummary.strongestExamplesByHint,
+          finalCounts: countWorld(world),
+          inspectionLog,
+        };
+      });
+      runs.push(run);
+      mergeCountObjects(aggregate.primaryHintCounts, run.protoCultureSummary.primaryHintCounts);
+      mergeCountObjects(aggregate.stableHintCounts, run.protoCultureSummary.stableHintCounts);
+      mergeCountObjects(aggregate.activeHintCounts, run.protoCultureSummary.activeHintCounts);
+      mergeCountObjects(aggregate.anchorTypeWithHintCounts, run.protoCultureSummary.anchorTypeWithHintCounts);
+      aggregate.nonHumanAnchorWithHints += run.protoCultureSummary.nonHumanAnchorWithHints || 0;
+      aggregateStrongestExamples(aggregate.strongestExamplesByHint, run.protoCultureSummary.strongestExamplesByHint);
+    }
+    aggregate.primaryHintCounts = sortedCountObject(aggregate.primaryHintCounts);
+    aggregate.stableHintCounts = sortedCountObject(aggregate.stableHintCounts);
+    aggregate.activeHintCounts = sortedCountObject(aggregate.activeHintCounts);
+    aggregate.anchorTypeWithHintCounts = sortedCountObject(aggregate.anchorTypeWithHintCounts);
+    return JSON.parse(JSON.stringify({
+      version: PROTO_CULTURE_EXPORT_VERSION,
+      ticks: ticksToRun,
+      inspectEvery,
+      runs,
+      aggregate,
+    }));
+  } finally {
+    tick = savedState.tick;
+    world = cloneWorld(savedState.world, { includeMetadata: true });
+    currentInitialWorld = savedState.currentInitialWorld ? cloneWorld(savedState.currentInitialWorld, { includeMetadata: true }) : null;
+    currentInitialSettings = savedState.currentInitialSettings;
+    activeMapSeed = normalizeMapSeed(savedState.activeMapSeed);
+    mapFeatures = cloneMapFeatures(savedState.mapFeatures);
+    worldPOIs = clonePOIs(savedState.worldPOIs);
+    placeMemory = JSON.parse(JSON.stringify(savedState.placeMemory));
+    recording = JSON.parse(JSON.stringify(savedState.recording));
+    macroTimeline = JSON.parse(JSON.stringify(savedState.macroTimeline));
+    currentRegionalSubstrate = savedState.currentRegionalSubstrate ? cloneRegionalSubstrateLayout(savedState.currentRegionalSubstrate) : null;
+    macroWorld = JSON.parse(JSON.stringify(savedState.macroWorld));
+    macroDisplayWorld = savedState.macroDisplayWorld ? cloneWorld(savedState.macroDisplayWorld, { includeMetadata: true }) : null;
+    macroDisplayFrame = savedState.macroDisplayFrame ? JSON.parse(JSON.stringify(savedState.macroDisplayFrame)) : null;
+    macroDisplayMaskCache = { source: null, macroTick: null, populationSerial: null, memorySerial: null, lineageSerial: null, politySerial: null, lineageVisible: null, mode: null, masks: null };
+    macroFrames = JSON.parse(JSON.stringify(savedState.macroFrames));
+    macroHistory = JSON.parse(JSON.stringify(savedState.macroHistory));
+    macroRecentFrames = JSON.parse(JSON.stringify(savedState.macroRecentFrames));
+    macroMemory = JSON.parse(JSON.stringify(savedState.macroMemory));
+    humanLineageMemory = JSON.parse(JSON.stringify(savedState.humanLineageMemory));
+    humanPolityMemory = JSON.parse(JSON.stringify(savedState.humanPolityMemory));
+    if (randomSeedInput) randomSeedInput.value = savedState.randomSeedInputValue;
+    updateRecordingStatus();
+    updateMacroTimelineStatus();
+    refreshMapSeedTextarea();
+  }
+}
+
 function createSnapshotExport() {
   const rows = createWorldRows(world);
   const analyzedMacroWorld = ensureMacroAnalysis();
@@ -10130,14 +10491,11 @@ function createRandomMapSeedPreset() {
     if (rng() < 0.28 && inBounds(x, y + 1)) seed.mountains.push({ x, y: y + 1 });
   }
 
-  let riverX = randomInt(rng, 8, WIDTH - 9);
-  for (let y = 1; y < HEIGHT - 1; y += 1) {
-    riverX = Math.max(2, Math.min(WIDTH - 3, riverX + randomInt(rng, -1, 1)));
-    seed.rivers.push({ x: riverX, y });
-  }
+  seed.rivers = generateRiverPath(rng, { blockedPoints: seed.mountains });
+  const springRiverAnchor = seed.rivers[Math.min(3, Math.max(0, seed.rivers.length - 1))] || { x: WIDTH / 2, y: 4 };
 
   seed.pois.push(
-    { id: "seed_spring_random", type: POI_TYPES.SPRING, x: Math.max(2, riverX - 2), y: 4 },
+    { id: "seed_spring_random", type: POI_TYPES.SPRING, x: Math.max(2, Math.min(WIDTH - 3, springRiverAnchor.x - 2)), y: springRiverAnchor.y },
     { id: "seed_rot_source_random", type: POI_TYPES.ROT_SOURCE, x: WIDTH - 7, y: HEIGHT - 6 },
     { id: "seed_great_forest_random", type: POI_TYPES.GREAT_FOREST, x: WIDTH - 8, y: 7 },
     { id: "seed_monument_random", type: POI_TYPES.MONUMENT, x: 7, y: HEIGHT - 7 }
@@ -10589,6 +10947,7 @@ exportSnapshotBtn.addEventListener("click", exportSnapshotJson);
 startRecordingBtn.addEventListener("click", startRecording);
 stopRecordingBtn.addEventListener("click", stopRecording);
 exportRecordingBtn.addEventListener("click", exportRecordingJson);
+exportProtoCultureSummaryBtn.addEventListener("click", exportProtoCultureSummaryJson);
 clearRecordingBtn.addEventListener("click", clearRecording);
 if (exportMapSeedBtn) exportMapSeedBtn.addEventListener("click", exportMapSeedJson);
 if (importMapSeedBtn) importMapSeedBtn.addEventListener("click", () => {
@@ -10805,6 +11164,9 @@ window.__triSpeciesSim = {
   summarizeProtoCultureForPlaceMemoryForTest(memory) {
     return JSON.parse(JSON.stringify(summarizeProtoCultureForPlaceMemory(memory)));
   },
+  createProtoCultureSummaryExport,
+  exportProtoCultureSummaryJson,
+  runProtoCultureSummaryAuditForSeedsForTest,
   getLastWakeReportForTest() {
     const report = placeMemory.wakeReports[placeMemory.wakeReports.length - 1] || null;
     return report ? JSON.parse(JSON.stringify(report)) : null;
@@ -10818,6 +11180,9 @@ window.__triSpeciesSim = {
   },
   isExploreCellPassableForTest(source = world, x, y, pois = worldPOIs) {
     return isExploreCellPassable(source, x, y, pois);
+  },
+  getExploreCellBlockerReasonForTest(source = world, x, y, pois = worldPOIs) {
+    return getExploreCellBlockerReason(source, x, y, pois);
   },
   movePlayerObserverForTest(dx, dy, source = world, pois = worldPOIs) {
     return JSON.parse(JSON.stringify(movePlayerObserver(dx, dy, source, pois)));

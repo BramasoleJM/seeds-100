@@ -188,6 +188,37 @@ This is an audit label only. It does not change the Human-related proto-culture 
 
 V0.14B.1 does not tune `protoCultureHints`, `protoCultureMemory`, Human-related gates, semantic traits, place archetypes, wake report sparsity, or simulation rules.
 
+## V0.14B.2 Lightweight Export And Audit Helper
+
+V0.14B.2 adds a Recording-panel **Export Proto-Culture Summary JSON** control.
+
+The lightweight export is compact:
+
+```text
+type: tri_species_proto_culture_summary
+version: 0.14B.2
+tick
+sourceRecordingRange
+placeMemory.protoCultureSummary
+placeMemory.compactAnchors
+```
+
+`compactAnchors` keeps only anchor id/type/name, position, place archetype, primary/stable/active/current hints, and capped signal data.
+
+The lightweight export excludes:
+
+```text
+frames
+keyframes
+terrainRows
+unitRows
+full snapshots
+```
+
+V0.14B.2 also adds `runProtoCultureSummaryAuditForSeedsForTest`, a deterministic test/audit helper for collecting compact proto-culture summaries across multiple seeds.
+
+The helper is observer/audit tooling only. It does not change `protoCultureHints`, `protoCultureMemory`, Human-related gates, semantic traits, place archetypes, wake report sparsity, movement, terrain, units, fertility, POI behavior, river blockers, or any H/B/S ecology rules.
+
 ## Future Use
 
 Future civilization modules may read these hints as candidate signals, but V0.14B does not implement civilization modules or gameplay behavior.
