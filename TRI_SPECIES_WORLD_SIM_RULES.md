@@ -4896,6 +4896,7 @@ Lightweight proto-culture export:
 
 ```text
 Recording controls include Export Proto-Culture Summary JSON.
+Recording controls include Inspect Current Places for one-click current-tick place review from Macro View.
 The lightweight export has type tri_species_proto_culture_summary and version 0.14B.2.
 It includes tick, sourceRecordingRange, placeMemory.protoCultureSummary, and compact proto-culture anchors.
 It excludes full frames, keyframes, terrain rows, unit rows, and full snapshots.
@@ -4918,6 +4919,7 @@ Known simplifications:
 Explore collision uses a small continuous player-radius sample against visible grid blockers.
 Generated rivers use a simple deterministic vertical meander with local mountain avoidance rather than full pathfinding.
 The multi-seed audit helper is a test/audit hook first; it inspects available Human-related targets and POIs on a fixed cadence.
+Inspect Current Places is an audit convenience; it writes the current tick's important places into Place Memory but does not change world cells, units, POIs, terrain, movement, fertility, or tick order.
 ```
 
 ---

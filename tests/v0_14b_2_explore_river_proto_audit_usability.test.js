@@ -182,7 +182,9 @@ assert.ok(pointsConnectedEnough(preset.rivers), "editable random map seed preset
 
 assert.equal(typeof sim.createProtoCultureSummaryExport, "function", "lightweight proto-culture export helper should exist");
 assert.equal(typeof sim.exportProtoCultureSummaryJson, "function", "proto-culture download helper should exist");
+assert.equal(typeof sim.inspectCurrentTickPlacesForTest, "function", "current tick place review helper should exist");
 assert.ok(document.getElementById("exportProtoCultureSummary").listeners.click, "Recording panel button should be wired");
+assert.ok(document.getElementById("inspectCurrentPlaces").listeners.click, "current tick place review button should be wired");
 
 const memory = {
   version: "0.14B",
@@ -235,6 +237,16 @@ assert.equal(afterMemory, beforeMemory, "summary export should not mutate place 
 assert.doesNotThrow(() => JSON.stringify(summaryExport), "summary export should be JSON stringifiable");
 sim.exportProtoCultureSummaryJson();
 assert.ok(context.__lastDownloadedJsonForTest().includes("tri_species_proto_culture_summary"), "download helper should serialize the compact export");
+
+sim.setPlaceMemoryForTest({ version: "0.14B", anchors: [], awakeCycleInspectedAnchorIds: [], wakeReports: [] });
+sim.applyInitialSettings({ randomizeSeed: true, statusPrefix: "place review test " });
+const placeReview = sim.inspectCurrentTickPlacesForTest({ maxTargets: 24 });
+assert.equal(placeReview.type, "tri_species_current_tick_place_review", "current place review should return a compact review object");
+assert.ok(placeReview.summary.scanned > 0, "current place review should scan current tick places");
+assert.ok(placeReview.items.length > 0, "current place review should include compact inspected place items");
+assert.ok(placeReview.placeMemory.protoCultureSummary, "current place review should include the updated proto-culture summary");
+assert.ok(placeReview.items.every((item) => !("currentSnapshot" in item)), "current place review items should stay compact");
+assert.ok(document.getElementById("semanticTagInfoPanel").textContent.includes("Current Tick Places"), "current place review should show an immediate readable panel");
 
 assert.equal(typeof sim.runProtoCultureSummaryAuditForSeedsForTest, "function", "multi-seed proto-culture audit helper should exist");
 const auditOptions = { seeds: [31401, 31402], ticks: 40, inspectEvery: 10, maxTargets: 12 };

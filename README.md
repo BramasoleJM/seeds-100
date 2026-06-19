@@ -51,7 +51,7 @@ It does not change `protoCultureHints`, `protoCultureMemory`, Place Memory updat
 
 ## V0.14B.2 Explore / River / Proto-Culture Audit Usability
 
-The Recording panel includes **Export Proto-Culture Summary JSON** for compact proto-culture audit data without full recording frames or keyframes.
+The Recording panel includes **Inspect Current Places** for one-click current-tick place review from Macro View, plus **Export Proto-Culture Summary JSON** for compact proto-culture audit data without full recording frames or keyframes.
 Generated worlds and random worlds include `mapFeatures.rivers` in exports.
 BLOCK/mountain cells render black in Cell, Macro, Substrate Macro, and Explore views so blockers remain visually obvious.
 `runProtoCultureSummaryAuditForSeedsForTest` can run compact deterministic multi-seed proto-culture summary audits for tests/tools.

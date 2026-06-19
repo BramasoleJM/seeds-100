@@ -316,6 +316,7 @@ const exportSnapshotBtn = document.getElementById("exportSnapshot");
 const startRecordingBtn = document.getElementById("startRecording");
 const stopRecordingBtn = document.getElementById("stopRecording");
 const exportRecordingBtn = document.getElementById("exportRecording");
+const inspectCurrentPlacesBtn = document.getElementById("inspectCurrentPlaces");
 const exportProtoCultureSummaryBtn = document.getElementById("exportProtoCultureSummary");
 const clearRecordingBtn = document.getElementById("clearRecording");
 const startMacroTimelineBtn = document.getElementById("startMacroTimeline");
@@ -9894,6 +9895,121 @@ function exportProtoCultureSummaryJson() {
   );
 }
 
+function collectCurrentPlaceReviewTargets(source = world) {
+  refreshMacroDisplayFrame({ force: true, mode: "macro" });
+  const semanticTargets = createSemanticTags(macroDisplayWorld || source, { mode: "macro" })
+    .filter((tag) => ["H village", "H seat", "H pressured seat", "H old seat", "H outpost", "H remnant", "H domain", "B range", "S scar", "Rot Source", "Spring", "Great Forest", "Monument"].includes(tag.label));
+  const poiTargets = (worldPOIs || [])
+    .filter((poi) => poi.state !== "inactive")
+    .map(poiToSemanticTag);
+  return dedupeExploreTargets([
+    ...humanVillageExploreTargets(),
+    ...humanSeatExploreTargets(),
+    ...humanOutpostExploreTargets(),
+    ...semanticTargets,
+    ...poiTargets,
+    ...humanFallbackAuditTargets(source),
+  ]).sort((a, b) => exploreInteractionPriority(a) - exploreInteractionPriority(b) ||
+    semanticTagPriority(a) - semanticTagPriority(b) ||
+    String(a.sourceId || "").localeCompare(String(b.sourceId || "")) ||
+    (a.y - b.y) ||
+    (a.x - b.x));
+}
+
+function compactCurrentPlaceReviewItem(anchor = {}) {
+  const snapshot = anchor.currentSnapshot || {};
+  const memory = anchor.protoCultureMemory || {};
+  return {
+    anchorId: anchor.id || null,
+    anchorType: anchor.type || "unknown",
+    displayName: anchor.displayName || "Place",
+    position: anchor.position ? { x: anchor.position.x, y: anchor.position.y } : null,
+    placeArchetype: snapshot.placeArchetype || null,
+    primaryHint: memory.primaryHint || null,
+    activeHints: Array.isArray(memory.activeHints) ? memory.activeHints.slice(0, 6) : [],
+    stableHints: Array.isArray(memory.stableHints) ? memory.stableHints.slice(0, 6) : [],
+  };
+}
+
+function summarizeCurrentPlaceReviewItems(items = []) {
+  const byType = {};
+  const primaryHints = {};
+  let withProtoCulture = 0;
+  for (const item of items) {
+    incrementSummaryCount(byType, item.anchorType || "unknown");
+    if (item.primaryHint) incrementSummaryCount(primaryHints, item.primaryHint);
+    if (item.primaryHint || item.activeHints.length || item.stableHints.length) withProtoCulture += 1;
+  }
+  return {
+    scanned: items.length,
+    withProtoCulture,
+    byType: sortedCountObject(byType),
+    primaryHints: sortedCountObject(primaryHints),
+  };
+}
+
+function formatCompactCountList(counts = {}, fallback = "none") {
+  const entries = Object.entries(counts || {});
+  if (!entries.length) return fallback;
+  return entries.map(([key, value]) => `${key} ${value}`).join(", ");
+}
+
+function showCurrentPlaceReviewPanel(review) {
+  if (!semanticTagInfoPanelEl || !review) return;
+  const examples = review.items
+    .filter((item) => item.primaryHint || item.activeHints.length || item.stableHints.length)
+    .slice(0, 12)
+    .map((item) => {
+      const pos = item.position ? `${item.position.x},${item.position.y}` : "?,?";
+      const hint = item.primaryHint || item.activeHints[0] || item.stableHints[0] || "no proto-culture hint";
+      return `${item.displayName} (${item.anchorType}) @ ${pos}: ${hint}`;
+    });
+  const textLines = [
+    "Current Tick Places",
+    `Tick: ${review.tick}`,
+    `Scanned: ${review.summary.scanned}`,
+    `With proto-culture memory: ${review.summary.withProtoCulture}`,
+    `Place types: ${formatCompactCountList(review.summary.byType)}`,
+    `Primary hints: ${formatCompactCountList(review.summary.primaryHints)}`,
+    "Examples:",
+    ...(examples.length ? examples : ["none yet"]),
+  ];
+  semanticTagInfoPanelEl.className = "semantic-tag-info-panel visible";
+  setElementAttribute(semanticTagInfoPanelEl, "aria-hidden", "false");
+  semanticTagInfoPanelEl.innerHTML = "";
+  semanticTagInfoPanelEl.textContent = textLines.join("\n");
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "semantic-tag-info-close";
+  closeButton.textContent = "Close";
+  closeButton.addEventListener("click", hideSemanticTagInfo);
+  semanticTagInfoPanelEl.appendChild(closeButton);
+}
+
+function inspectCurrentTickPlaces(options = {}) {
+  const maxTargets = Number.isFinite(options.maxTargets) ? Math.max(1, Math.floor(options.maxTargets)) : 96;
+  const targets = collectCurrentPlaceReviewTargets(world).slice(0, maxTargets);
+  const items = [];
+  for (const target of targets) {
+    const anchor = inspectPlaceTarget(target, world);
+    if (anchor) items.push(compactCurrentPlaceReviewItem(anchor));
+  }
+  const review = {
+    type: "tri_species_current_tick_place_review",
+    version: PROTO_CULTURE_EXPORT_VERSION,
+    tick,
+    scannedTargets: targets.length,
+    summary: summarizeCurrentPlaceReviewItems(items),
+    items,
+    placeMemory: {
+      protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
+    },
+  };
+  showCurrentPlaceReviewPanel(review);
+  showStatus(`Inspected ${items.length} current places at tick ${tick}.`);
+  return JSON.parse(JSON.stringify(review));
+}
+
 function mergeCountObjects(target, source) {
   for (const [key, value] of Object.entries(source || {})) {
     target[key] = (target[key] || 0) + value;
@@ -10947,6 +11063,7 @@ exportSnapshotBtn.addEventListener("click", exportSnapshotJson);
 startRecordingBtn.addEventListener("click", startRecording);
 stopRecordingBtn.addEventListener("click", stopRecording);
 exportRecordingBtn.addEventListener("click", exportRecordingJson);
+if (inspectCurrentPlacesBtn) inspectCurrentPlacesBtn.addEventListener("click", () => inspectCurrentTickPlaces());
 exportProtoCultureSummaryBtn.addEventListener("click", exportProtoCultureSummaryJson);
 clearRecordingBtn.addEventListener("click", clearRecording);
 if (exportMapSeedBtn) exportMapSeedBtn.addEventListener("click", exportMapSeedJson);
@@ -11166,6 +11283,10 @@ window.__triSpeciesSim = {
   },
   createProtoCultureSummaryExport,
   exportProtoCultureSummaryJson,
+  inspectCurrentTickPlacesForTest: inspectCurrentTickPlaces,
+  collectCurrentPlaceReviewTargetsForTest(source = world) {
+    return JSON.parse(JSON.stringify(collectCurrentPlaceReviewTargets(source)));
+  },
   runProtoCultureSummaryAuditForSeedsForTest,
   getLastWakeReportForTest() {
     const report = placeMemory.wakeReports[placeMemory.wakeReports.length - 1] || null;
