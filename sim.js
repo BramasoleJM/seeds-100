@@ -18,6 +18,7 @@ const PLACE_CHANGE_CATEGORIES = new Set(["human_expanded", "human_shrank", "vill
 const PLACE_CHANGE_SUBJECTS = new Set(["human", "polity", "lineage", "village", "seat", "poi", "rot", "forest", "water", "mixed"]);
 const PLACE_CHANGE_DIRECTIONS = new Set(["growing", "declining", "holding", "unstable", "moved", "split", "collapsed", "recovered", "none"]);
 const PROTO_CULTURE_MEMORY_VERSION = "0.14B";
+const PROTO_CULTURE_SUMMARY_VERSION = "0.14B.1";
 const SEMANTIC_TRAITS = Object.freeze({
   RIVER_ADJACENT: "river_adjacent",
   RIVER_CENTER: "river_center",
@@ -8156,6 +8157,177 @@ function updateProtoCultureMemory(memory, protoCultureHints = [], currentTick = 
   });
 }
 
+function sortedCountObject(counts = {}) {
+  return Object.fromEntries(
+    Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  );
+}
+
+function incrementSummaryCount(counts, key) {
+  if (!key) return;
+  counts[key] = (counts[key] || 0) + 1;
+}
+
+function createEmptyProtoCultureSummary() {
+  return {
+    version: PROTO_CULTURE_SUMMARY_VERSION,
+    totalAnchors: 0,
+    anchorsWithHints: 0,
+    anchorsWithMemory: 0,
+    primaryHintCounts: {},
+    stableHintCounts: {},
+    activeHintCounts: {},
+    anchorTypeCounts: {},
+    anchorTypeWithHintCounts: {},
+    nonHumanAnchorWithHints: 0,
+    nonHumanAnchorExamples: [],
+    strongestExamplesByHint: Object.fromEntries(Object.values(PROTO_CULTURE_HINTS).map((id) => [id, []])),
+  };
+}
+
+function isHumanRelatedAnchorType(anchorType) {
+  return ["village", "seat", "old_seat", "outpost", "remnant", "domain"].includes(anchorType);
+}
+
+function getAnchorProtoCultureScores(anchor = {}) {
+  const scores = {};
+  const signals = anchor.protoCultureMemory?.signals || {};
+  if (signals && typeof signals === "object") {
+    for (const [id, signal] of Object.entries(signals)) {
+      if (!Object.values(PROTO_CULTURE_HINTS).includes(id)) continue;
+      const score = Number(Math.min(1, Math.max(0, signal?.score || 0)).toFixed(2));
+      if (score > 0) scores[id] = Math.max(scores[id] || 0, score);
+    }
+  }
+  for (const hint of anchor.currentSnapshot?.protoCultureHints || []) {
+    if (!Object.values(PROTO_CULTURE_HINTS).includes(hint?.id)) continue;
+    const score = Number(Math.min(1, Math.max(0, hint.score || 0)).toFixed(2));
+    if (score > 0 && scores[hint.id] === undefined) scores[hint.id] = score;
+  }
+  return scores;
+}
+
+function hasAnchorProtoCulture(anchor = {}) {
+  const hints = anchor.currentSnapshot?.protoCultureHints || [];
+  const signals = anchor.protoCultureMemory?.signals || {};
+  return (Array.isArray(hints) && hints.length > 0) ||
+    Boolean(signals && typeof signals === "object" && Object.keys(signals).length > 0);
+}
+
+function strongestProtoCultureScore(anchor = {}) {
+  const scores = Object.values(getAnchorProtoCultureScores(anchor));
+  return scores.length ? Math.max(...scores) : 0;
+}
+
+function getNonHumanAnchorProtoCultureReason(anchor = {}) {
+  const traits = anchor.currentSnapshot?.semanticTraits || [];
+  if (hasAnyTrait(traits, [
+    SEMANTIC_TRAITS.HUMAN_SETTLED,
+    SEMANTIC_TRAITS.HUMAN_SEAT,
+    SEMANTIC_TRAITS.HUMAN_OLD_SEAT,
+    SEMANTIC_TRAITS.HUMAN_OUTPOST,
+    SEMANTIC_TRAITS.HUMAN_REMNANT,
+    SEMANTIC_TRAITS.HUMAN_DOMAIN,
+    SEMANTIC_TRAITS.POLITY_OWNED,
+    SEMANTIC_TRAITS.LINEAGE_CONTINUITY,
+  ])) {
+    return "Human semantic traits were present in the sampled place.";
+  }
+  if (anchor.currentSnapshot?.rememberedHumanIdentity || anchor.rememberedHumanIdentity) {
+    return "Remembered Human identity was present.";
+  }
+  if (anchor.currentSnapshot?.humanMemory) {
+    return "Human memory was attached to this anchor.";
+  }
+  return "Proto-culture memory was attached to this anchor.";
+}
+
+function compactProtoCultureExampleAnchor(anchor = {}) {
+  return {
+    anchorId: anchor.id || null,
+    anchorType: anchor.type || anchor.sourceRef?.kind || "place",
+    displayName: anchor.displayName || anchor.type || "place",
+    primaryHint: anchor.protoCultureMemory?.primaryHint || null,
+    activeHints: Array.isArray(anchor.protoCultureMemory?.activeHints) ? anchor.protoCultureMemory.activeHints.slice() : [],
+    stableHints: Array.isArray(anchor.protoCultureMemory?.stableHints) ? anchor.protoCultureMemory.stableHints.slice() : [],
+    reason: getNonHumanAnchorProtoCultureReason(anchor),
+  };
+}
+
+function summarizeProtoCultureForPlaceMemory(memory = placeMemory) {
+  const summary = createEmptyProtoCultureSummary();
+  const anchors = Array.isArray(memory?.anchors) ? memory.anchors : [];
+  const primaryHintCounts = {};
+  const stableHintCounts = {};
+  const activeHintCounts = {};
+  const anchorTypeCounts = {};
+  const anchorTypeWithHintCounts = {};
+  const nonHumanExamples = [];
+  const examplesByHint = Object.fromEntries(Object.values(PROTO_CULTURE_HINTS).map((id) => [id, []]));
+
+  summary.totalAnchors = anchors.length;
+  for (const anchor of anchors) {
+    const anchorType = anchor?.type || anchor?.sourceRef?.kind || "place";
+    const hasHints = Array.isArray(anchor?.currentSnapshot?.protoCultureHints) && anchor.currentSnapshot.protoCultureHints.length > 0;
+    const hasMemory = Boolean(anchor?.protoCultureMemory?.signals && typeof anchor.protoCultureMemory.signals === "object" && Object.keys(anchor.protoCultureMemory.signals).length > 0);
+    const hasProtoCulture = hasAnchorProtoCulture(anchor);
+    const primaryHint = anchor?.protoCultureMemory?.primaryHint || null;
+    const stableHints = Array.isArray(anchor?.protoCultureMemory?.stableHints) ? anchor.protoCultureMemory.stableHints : [];
+    const activeHints = Array.isArray(anchor?.protoCultureMemory?.activeHints) ? anchor.protoCultureMemory.activeHints : [];
+    const scores = getAnchorProtoCultureScores(anchor);
+
+    incrementSummaryCount(anchorTypeCounts, anchorType);
+    if (hasHints) summary.anchorsWithHints += 1;
+    if (hasMemory) summary.anchorsWithMemory += 1;
+    if (hasProtoCulture) incrementSummaryCount(anchorTypeWithHintCounts, anchorType);
+    if (Object.values(PROTO_CULTURE_HINTS).includes(primaryHint)) incrementSummaryCount(primaryHintCounts, primaryHint);
+    for (const id of stableHints) {
+      if (Object.values(PROTO_CULTURE_HINTS).includes(id)) incrementSummaryCount(stableHintCounts, id);
+    }
+    for (const id of activeHints) {
+      if (Object.values(PROTO_CULTURE_HINTS).includes(id)) incrementSummaryCount(activeHintCounts, id);
+    }
+
+    if (hasProtoCulture && !isHumanRelatedAnchorType(anchorType)) {
+      summary.nonHumanAnchorWithHints += 1;
+      nonHumanExamples.push(anchor);
+    }
+
+    for (const id of Object.values(PROTO_CULTURE_HINTS)) {
+      if (scores[id] === undefined) continue;
+      examplesByHint[id].push({
+        anchorId: anchor?.id || null,
+        anchorType,
+        displayName: anchor?.displayName || anchorType,
+        primaryHint,
+        score: scores[id],
+        stable: stableHints.includes(id),
+      });
+    }
+  }
+
+  summary.primaryHintCounts = sortedCountObject(primaryHintCounts);
+  summary.stableHintCounts = sortedCountObject(stableHintCounts);
+  summary.activeHintCounts = sortedCountObject(activeHintCounts);
+  summary.anchorTypeCounts = sortedCountObject(anchorTypeCounts);
+  summary.anchorTypeWithHintCounts = sortedCountObject(anchorTypeWithHintCounts);
+  summary.nonHumanAnchorExamples = nonHumanExamples
+    .sort((a, b) => strongestProtoCultureScore(b) - strongestProtoCultureScore(a) || String(a?.id || "").localeCompare(String(b?.id || "")))
+    .slice(0, 8)
+    .map(compactProtoCultureExampleAnchor);
+  summary.strongestExamplesByHint = Object.fromEntries(
+    Object.entries(examplesByHint).map(([id, examples]) => [id, examples
+      .sort((a, b) => b.score - a.score ||
+        Number(b.primaryHint === id) - Number(a.primaryHint === id) ||
+        Number(b.stable) - Number(a.stable) ||
+        String(a.anchorId || "").localeCompare(String(b.anchorId || "")))
+      .slice(0, 3)])
+  );
+  return summary;
+}
+
 function snapshotPlace(anchorOrTarget = {}, source = world, radius = 2) {
   const x = Math.round(anchorOrTarget.x ?? anchorOrTarget.position?.x ?? 0);
   const y = Math.round(anchorOrTarget.y ?? anchorOrTarget.position?.y ?? 0);
@@ -9577,6 +9749,7 @@ function compactPlaceMemory() {
     version: placeMemory.version,
     anchors: placeMemory.anchors,
     wakeReports: placeMemory.wakeReports,
+    protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
   }));
 }
 
@@ -10628,6 +10801,9 @@ window.__triSpeciesSim = {
   },
   updateProtoCultureMemoryForTest(memory, protoCultureHints = [], currentTick = tick) {
     return JSON.parse(JSON.stringify(updateProtoCultureMemory(memory, protoCultureHints, currentTick)));
+  },
+  summarizeProtoCultureForPlaceMemoryForTest(memory) {
+    return JSON.parse(JSON.stringify(summarizeProtoCultureForPlaceMemory(memory)));
   },
   getLastWakeReportForTest() {
     const report = placeMemory.wakeReports[placeMemory.wakeReports.length - 1] || null;

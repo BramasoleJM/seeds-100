@@ -139,7 +139,8 @@ Created by: `createEmptyPlaceMemory`.
 Read by: inspection, sleep/wake, exports.
 Mutates simulation: no.
 Observer-only: yes.
-Export shape: `version`, `anchors`, `wakeReports`.
+Export shape: `version`, `anchors`, `wakeReports`, optional/export-derived `protoCultureSummary`.
+V0.14B.1 export-derived field: `protoCultureSummary` stores compact counts and examples for proto-culture audit readability. It is derived during snapshot/recording export and is not live Place Memory state.
 Future notes: add compact fields only.
 
 ## PlaceMemoryAnchor
@@ -175,6 +176,16 @@ Observer-only: yes.
 Export shape: category, subject, direction, intensity, ticks, metricsDelta, playerText, llmContext.
 V0.14B note: `llmContext` may include `protoCultureHints` and `protoCultureMemory` for observer/export consumers.
 Future notes: no-significant-change remains quiet to the player.
+
+## ProtoCultureSummary
+
+Lives in: derived export data at `placeMemory.protoCultureSummary`.
+Created by: Place Memory export serialization.
+Read by: snapshot/recording audit consumers.
+Mutates simulation: no.
+Observer-only: yes.
+Export shape: version, anchor totals, hint count maps, anchor type count maps, capped non-Human-labeled examples, and capped strongest examples by allowed hint id.
+Future notes: keep compact and deterministic; do not use as live state or gameplay input.
 
 ## PlayerObserver
 

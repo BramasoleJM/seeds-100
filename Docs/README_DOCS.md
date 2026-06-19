@@ -32,7 +32,7 @@ Docs/Architecture/HUMAN_IDENTITY_STATES.md
 Docs/Architecture/PROTO_CULTURE_HINTS.md
 ```
 
-These architecture docs describe the current observer layers and the V0.14B direction.
+These architecture docs describe the current observer layers and the V0.14B.1 audit direction.
 
 ---
 
@@ -90,21 +90,24 @@ Stable snapshots and backup zips. Do not edit backup contents during normal deve
 Current completed stage:
 
 ```text
-TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
+TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 ```
 
 Recommended next stage:
 
 ```text
-V0.14B Observer-Only Proto-Culture Hints
+Next observer-only audit or tuning task, after reviewing V0.14B.1 exported summaries.
 ```
 
-V0.14B should add compact `protoCultureHints` and anchor-level `protoCultureMemory` to Place Memory for Human-related inspected places.
+V0.14B added compact `protoCultureHints` and anchor-level `protoCultureMemory` to Place Memory for Human-related inspected places.
+
+V0.14B.1 adds compact export-derived `protoCultureSummary` inside `placeMemory` for recording and snapshot audit readability.
 
 ```text
 protoCultureHints are observer-only interpretation signals.
+protoCultureSummary is export-only audit data.
 protoCultureHints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, or tarot mechanics.
-protoCultureHints must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
+protoCultureHints and protoCultureSummary must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
 ```
 
 Do not add multi-screen maps, NPCs, quests, resource economy, buildings, civilization gameplay, AI calls, tarot mechanics, save/load, network calls, or external libraries yet.

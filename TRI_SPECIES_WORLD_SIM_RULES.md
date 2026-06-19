@@ -4822,12 +4822,46 @@ V0.14B prepares future observer interpretation only; it does not implement civil
 
 ---
 
+## 72.3 V0.14B.1 Proto-Culture Readability Audit
+
+V0.14B.1 adds an export-only proto-culture summary to Place Memory exports.
+
+It does not change Human, Beast, or Spirit movement, lifecycle, conflict, conversion, reproduction, terrain rewriting, fertility balance, POI ecology effects, river blocker behavior, terrain decay, grid size, terrain types, unit types, Explore movement, tick order, map seed behavior, semantic trait derivation, place archetype priority, proto-culture scoring, proto-culture memory updates, Human-related gates, or wake report visibility.
+
+Export shape:
+
+```text
+Snapshot and recording exports include placeMemory.protoCultureSummary.
+The summary is derived at export time.
+The summary is not live mutable simulation state.
+The summary counts anchors, primary hints, stable hints, active hints, anchor types, non-Human-labeled anchors with proto-culture hints, and compact strongest examples by hint.
+```
+
+Observer-only limits:
+
+```text
+protoCultureSummary is audit data only.
+protoCultureSummary must not feed back into protoCultureHints, protoCultureMemory, Place Memory update timing, wake reports, semantic traits, place archetypes, Human identity, movement, fertility, terrain, units, POI behavior, river blockers, Explore movement, or tick order.
+protoCultureSummary does not tune scoring or gates.
+protoCultureSummary does not add civilizations, factions, AI, resources, buildings, NPCs, quests, story events, myth events, tarot mechanics, save/load, network calls, new terrain, new units, or multi-screen maps.
+```
+
+Known simplifications:
+
+```text
+Non-Human-labeled audit counts treat only village, seat, old_seat, outpost, remnant, and domain as clearly Human-related anchor types.
+Everything else is counted as non-Human-labeled for audit purposes when it has proto-culture hints or memory.
+Strongest examples and non-Human examples are capped for compact export readability.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 Date: 2026-06-19
-Status: V0.14B Observer-Only Proto-Culture Hints implemented
+Status: V0.14B.1 Proto-Culture Readability Audit implemented
 ```
 
 Current version split:
@@ -4882,6 +4916,7 @@ Place memory semantics / river village guard: TRI_SPECIES_WORLD_SIM_V0.13.1.2_PL
 Semantic place layer: TRI_SPECIES_WORLD_SIM_V0.14A_SEMANTIC_PLACE_LAYER
 Semantic place tuning: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
 Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
+Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 ```
 
 V0.8.3 notes:

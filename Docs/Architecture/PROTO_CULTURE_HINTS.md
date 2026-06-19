@@ -144,6 +144,50 @@ primaryHint is the highest stable hint, then highest active hint, then null
 
 Snapshot and recording exports include `currentSnapshot.protoCultureHints` and anchor `protoCultureMemory` through compact Place Memory export.
 
+## V0.14B.1 Readability Audit Summary
+
+V0.14B.1 adds export-derived `placeMemory.protoCultureSummary` to snapshot and recording exports.
+
+The summary is compact audit data only. It is derived during export and is not stored as live mutable simulation state.
+
+Core fields:
+
+```text
+version
+totalAnchors
+anchorsWithHints
+anchorsWithMemory
+primaryHintCounts
+stableHintCounts
+activeHintCounts
+anchorTypeCounts
+anchorTypeWithHintCounts
+nonHumanAnchorWithHints
+nonHumanAnchorExamples
+strongestExamplesByHint
+```
+
+`primaryHintCounts` counts each anchor `protoCultureMemory.primaryHint`.
+`stableHintCounts` counts entries in `protoCultureMemory.stableHints`.
+`activeHintCounts` counts entries in `protoCultureMemory.activeHints`.
+
+`nonHumanAnchorWithHints` audits anchors whose type is not one of:
+
+```text
+village
+seat
+old_seat
+outpost
+remnant
+domain
+```
+
+This is an audit label only. It does not change the Human-related proto-culture gate.
+
+`strongestExamplesByHint` keeps up to three compact strongest anchors per allowed hint id using existing hint or memory scores.
+
+V0.14B.1 does not tune `protoCultureHints`, `protoCultureMemory`, Human-related gates, semantic traits, place archetypes, wake report sparsity, or simulation rules.
+
 ## Future Use
 
 Future civilization modules may read these hints as candidate signals, but V0.14B does not implement civilization modules or gameplay behavior.

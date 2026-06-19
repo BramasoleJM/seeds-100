@@ -12,7 +12,7 @@ The current stability build uses a `40 x 25` grid and clamps Play speed to at le
 
 ## What this prototype tests
 
-The demo tests whether three visible unit types can create readable dynamics through movement, fertility, terrain rewriting, lifecycle, group behavior, conflict, conversion, reproduction, and terrain decay on one grid. V0.9 also adds an observer-only Macro World Layer that interprets the grid as places, routes, events, and map icons. V0.10.7.1 makes Macro View read primarily as population evolution shapes. V0.10.9.1 keeps the observer-only slow memory trace layer selective. V0.11 adds a Human Lineage overlay that tracks whether current Human settlement shapes continue or descend from older Human settlement shapes. V0.11.1 makes that layer visible from the main controls and adds a compact status readout. V0.11.2 replaces old debug icons with sparse Semantic Tags anchored to population shapes, lineage memory, and POIs. V0.11.3 separates Human domain from stable Human seat anchors. V0.11.4 declutters Semantic Tags so the map shows only the most useful labels by default. V0.11.5 adds conservative Human outposts so far Human domains appear as `H outpost` before they can become `H seat`. V0.11.6 groups Human seats, outposts, and villages into observer-only Human polities. V0.11.7 gives Human polity tags stable color accents and detailed hover identity. V0.11.8 makes visible semantic tags clickable and opens a compact info panel. V0.13.1 adds editable map seeds, river map features, inspected-place memory, and an Explore sleep wake report. V0.13.1.2 makes place memory structured, suppresses unchanged player text, and prevents current Human village anchors from occupying river cells. V0.14A adds observer-only semantic traits, place archetypes, and interpretation hints to Place Memory snapshots and change context. V0.14A.1 tightens `contested_poi`, adds `settled_village`, and lets inspected Human places retain compact remembered identity without claiming current ownership. V0.14B adds observer-only `protoCultureHints` and anchor-level `protoCultureMemory` for inspected Human-related places.
+The demo tests whether three visible unit types can create readable dynamics through movement, fertility, terrain rewriting, lifecycle, group behavior, conflict, conversion, reproduction, and terrain decay on one grid. V0.9 also adds an observer-only Macro World Layer that interprets the grid as places, routes, events, and map icons. V0.10.7.1 makes Macro View read primarily as population evolution shapes. V0.10.9.1 keeps the observer-only slow memory trace layer selective. V0.11 adds a Human Lineage overlay that tracks whether current Human settlement shapes continue or descend from older Human settlement shapes. V0.11.1 makes that layer visible from the main controls and adds a compact status readout. V0.11.2 replaces old debug icons with sparse Semantic Tags anchored to population shapes, lineage memory, and POIs. V0.11.3 separates Human domain from stable Human seat anchors. V0.11.4 declutters Semantic Tags so the map shows only the most useful labels by default. V0.11.5 adds conservative Human outposts so far Human domains appear as `H outpost` before they can become `H seat`. V0.11.6 groups Human seats, outposts, and villages into observer-only Human polities. V0.11.7 gives Human polity tags stable color accents and detailed hover identity. V0.11.8 makes visible semantic tags clickable and opens a compact info panel. V0.13.1 adds editable map seeds, river map features, inspected-place memory, and an Explore sleep wake report. V0.13.1.2 makes place memory structured, suppresses unchanged player text, and prevents current Human village anchors from occupying river cells. V0.14A adds observer-only semantic traits, place archetypes, and interpretation hints to Place Memory snapshots and change context. V0.14A.1 tightens `contested_poi`, adds `settled_village`, and lets inspected Human places retain compact remembered identity without claiming current ownership. V0.14B adds observer-only `protoCultureHints` and anchor-level `protoCultureMemory` for inspected Human-related places. V0.14B.1 adds an export-only `protoCultureSummary` for audit readability.
 
 This version does not implement a Zelda-style multi-screen map, tarot mechanics, story systems, resources, villages, NPCs, quests, or save/load.
 
@@ -39,6 +39,13 @@ Place Memory anchors can accumulate `protoCultureMemory`.
 These are deterministic observer-only candidate signals for future interpretation.
 They are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, tarot mechanics, or gameplay rules.
 They do not change ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
+
+## V0.14B.1 Proto-Culture Readability Audit
+
+Recording and snapshot exports include compact `protoCultureSummary` inside `placeMemory`.
+The summary counts primary, stable, and active proto-culture hints, anchor types, and non-Human-labeled anchors with proto-culture hints.
+This is export-only and observer-only.
+It does not change `protoCultureHints`, `protoCultureMemory`, Place Memory update timing, wake reports, or simulation rules.
 
 ## Units
 
@@ -115,7 +122,7 @@ Lifecycle death, fertility-driven Human decline and migration, isolation death, 
 ## Rules version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 ```
 
 Current version split:
@@ -170,6 +177,7 @@ Place memory semantics / river village guard: TRI_SPECIES_WORLD_SIM_V0.13.1.2_PL
 Semantic place layer: TRI_SPECIES_WORLD_SIM_V0.14A_SEMANTIC_PLACE_LAYER
 Semantic place tuning: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
 Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
+Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 ```
 
 V0.14A Semantic Place Layer:
@@ -204,6 +212,17 @@ They do not change ecology, movement, fertility, POI behavior, terrain, units, t
 ```
 
 Known simplification: V0.14B scoring is compact and deterministic. Hint source traits and memory signals are capped for export size, and the Human-related gate prevents ordinary POIs, Beast ranges, River places, Great Forest places, Springs, Rot Sources, or Spirit scars from becoming proto-culture candidates unless Human memory or identity is present.
+
+V0.14B.1 Proto-Culture Readability Audit:
+
+```text
+Recording and snapshot exports include compact protoCultureSummary inside placeMemory.
+The summary counts primary, stable, and active proto-culture hints, anchor types, and non-Human-labeled anchors with proto-culture hints.
+This is export-only and observer-only.
+It does not change protoCultureHints, protoCultureMemory, Place Memory update timing, wake reports, or simulation rules.
+```
+
+Known simplification: V0.14B.1 derives summary examples from current Place Memory export data and caps non-Human audit examples and strongest hint examples for readability.
 
 Known simplification: V0.13.1.2 place state and Human memory are deterministic interpretation heuristics for readability. Anchor-center terrain state changes are treated as meaningful place-state changes even when the surrounding aggregate terrain delta is below the normal threshold. These interpretation records do not change ecology or movement rules.
 
