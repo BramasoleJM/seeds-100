@@ -4925,12 +4925,72 @@ Inspect Current Places is an audit convenience; it writes the current tick's imp
 
 ---
 
+## 72.5 V0.14C Human Culture Candidate Rollup
+
+V0.14C adds an observer-only export / analysis rollup from place-level proto-culture memory into Human polity / lineage candidate signals.
+
+It does not change Human, Beast, or Spirit movement, lifecycle, conflict, conversion, reproduction, terrain rewriting, fertility balance, POI ecology effects, river blocker behavior, terrain decay, grid size, terrain types, unit types, Explore movement, tick order, map seed behavior, semantic trait derivation, place archetype priority, proto-culture hint scoring, proto-culture memory update rules, Human-related proto-culture gates, protoCultureSummary counts, or wake report sparsity.
+
+Export shape:
+
+```text
+Snapshot, recording, lightweight proto-culture summary export, current place review, and multi-seed audit outputs include placeMemory.humanCultureCandidateSummary.
+The summary is derived at export / review time.
+The summary is not live mutable simulation state.
+```
+
+Ownership rules:
+
+```text
+Only Human polity ids can own polity candidate signals.
+Only Human lineage ids can own lineage candidate signals.
+POIs, scars, rivers, springs, forests, Beast ranges, and ordinary places are context only.
+Context-only evidence cannot create emerging or candidate status.
+No owner ids are invented.
+```
+
+Allowed statuses:
+
+```text
+emerging
+candidate
+```
+
+Allowed candidate types:
+
+```text
+river_bound_polity
+memory_bound_lineage
+monument_centered_polity
+forest_edge_polity
+frontier_outpost_polity
+split_lineage_polity
+```
+
+Observer-only limits:
+
+```text
+humanCultureCandidateSummary must not feed back into protoCultureHints, protoCultureMemory, Place Memory update timing, wake reports, semantic traits, place archetypes, Human identity, movement, fertility, terrain, units, POI behavior, river blockers, Explore movement, or tick order.
+humanCultureCandidateSummary does not add civilizations, factions, AI, resources, buildings, NPCs, quests, story events, myth events, tarot mechanics, save/load, network calls, new terrain, new units, or multi-screen maps.
+```
+
+Known simplifications:
+
+```text
+Scoring is compact and deterministic.
+Context evidence is capped and can only add a small bonus when Human subject evidence already exists.
+Candidate owner entries and evidence anchors are capped for export readability.
+The multi-seed audit aggregate reports compact candidate totals instead of full recordings.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
 Date: 2026-06-19
-Status: V0.14B.2 Explore / River / Proto-Culture Audit Usability implemented
+Status: V0.14C Human Culture Candidate Rollup implemented
 ```
 
 Current version split:
@@ -4987,6 +5047,7 @@ Semantic place tuning: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
 Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
 Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 Explore / river / proto-culture audit usability: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
+Human culture candidate rollup: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
 ```
 
 V0.8.3 notes:

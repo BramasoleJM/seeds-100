@@ -30,9 +30,10 @@ Docs/Architecture/PLACE_ARCHETYPES.md
 Docs/Architecture/MACRO_PATTERNS.md
 Docs/Architecture/HUMAN_IDENTITY_STATES.md
 Docs/Architecture/PROTO_CULTURE_HINTS.md
+Docs/Architecture/HUMAN_CULTURE_CANDIDATES.md
 ```
 
-These architecture docs describe the current observer layers and the V0.14B.2 Explore / river / proto-culture audit usability direction.
+These architecture docs describe the current observer layers and the V0.14C Human culture candidate rollup direction.
 
 ---
 
@@ -90,7 +91,7 @@ Stable snapshots and backup zips. Do not edit backup contents during normal deve
 Current completed stage:
 
 ```text
-TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
+TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
 ```
 
 Recommended next stage:
@@ -103,13 +104,16 @@ V0.14B added compact `protoCultureHints` and anchor-level `protoCultureMemory` t
 
 V0.14B.1 adds compact export-derived `protoCultureSummary` inside `placeMemory` for recording and snapshot audit readability.
 V0.14B.2 adds a lightweight Recording-panel proto-culture summary export, compact multi-seed proto-culture audit helper, generated-world river map features, and clearer Explore blocker visuals.
+V0.14C adds `humanCultureCandidateSummary`, an export-derived Human polity / lineage rollup over existing place-level proto-culture memory.
 
 ```text
 protoCultureHints are observer-only interpretation signals.
 protoCultureSummary is export-only audit data.
+humanCultureCandidateSummary is observer-only export / analysis data.
 protoCultureHints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, or tarot mechanics.
 protoCultureHints and protoCultureSummary must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
-V0.14B.2 changes only Explore observer movement/collision usability, generated river feature creation, visuals, compact exports, audit helpers, docs, and tests.
+humanCultureCandidateSummary must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, Explore movement, proto-culture hint scoring, proto-culture memory updates, or wake report sparsity.
+V0.14C changes only compact exports, audit helpers, docs, and tests.
 ```
 
 Do not add multi-screen maps, NPCs, quests, resource economy, buildings, civilization gameplay, AI calls, tarot mechanics, save/load, network calls, or external libraries yet.

@@ -219,6 +219,35 @@ V0.14B.2 also adds `runProtoCultureSummaryAuditForSeedsForTest`, a deterministic
 
 The helper is observer/audit tooling only. It does not change `protoCultureHints`, `protoCultureMemory`, Human-related gates, semantic traits, place archetypes, wake report sparsity, movement, terrain, units, fertility, POI behavior, river blockers, or any H/B/S ecology rules.
 
+## V0.14C Human Culture Candidate Rollup
+
+V0.14C adds `placeMemory.humanCultureCandidateSummary` to snapshot exports, recording exports, lightweight proto-culture summary exports, current place reviews, and multi-seed audit results.
+
+The rollup is derived from Place Memory anchors, current / remembered Human polity and lineage identity, and existing `protoCultureMemory`.
+
+Only Human polity or Human lineage owners can own candidate signals. Context places can support evidence but cannot own candidates:
+
+```text
+POIs
+scars
+rivers
+springs
+forests
+Beast ranges
+ordinary places
+```
+
+Only these candidate statuses exist:
+
+```text
+emerging
+candidate
+```
+
+V0.14C does not change `protoCultureHints`, proto-culture scoring, Human-related gates, `protoCultureMemory` update rules, semantic traits, place archetypes, wake report sparsity, movement, terrain, units, fertility, POI behavior, river blockers, Explore movement, or any H/B/S ecology rules.
+
+V0.14C does not implement civilization modules, civilization gameplay, unlock effects, AI, tarot, story events, myth events, resources, buildings, NPCs, quests, new terrain, new units, save/load, network calls, or multi-screen maps.
+
 ## Future Use
 
 Future civilization modules may read these hints as candidate signals, but V0.14B does not implement civilization modules or gameplay behavior.

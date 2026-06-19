@@ -20,6 +20,7 @@ const PLACE_CHANGE_SUBJECTS = new Set(["human", "polity", "lineage", "village", 
 const PLACE_CHANGE_DIRECTIONS = new Set(["growing", "declining", "holding", "unstable", "moved", "split", "collapsed", "recovered", "none"]);
 const PROTO_CULTURE_MEMORY_VERSION = "0.14B";
 const PROTO_CULTURE_SUMMARY_VERSION = "0.14B.1";
+const HUMAN_CULTURE_CANDIDATE_VERSION = "0.14C";
 const SEMANTIC_TRAITS = Object.freeze({
   RIVER_ADJACENT: "river_adjacent",
   RIVER_CENTER: "river_center",
@@ -4075,6 +4076,26 @@ function generateRiverPath(rng, options = {}) {
   return normalizePointList(path);
 }
 
+function sanitizeRiverPathForWorld(points = [], source = world) {
+  const repaired = [];
+  const used = new Set();
+  for (const point of points || []) {
+    if (!inBounds(point.x, point.y)) continue;
+    const offsets = [0, -1, 1, -2, 2, -3, 3, -4, 4];
+    for (const offset of offsets) {
+      const x = Math.max(1, Math.min(WIDTH - 2, point.x + offset));
+      const y = point.y;
+      const key = pointKey(x, y);
+      const cell = source[y]?.[x];
+      if (!cell || used.has(key) || cell.terrain === TERRAIN.BLOCK || cell.unit) continue;
+      repaired.push({ x, y });
+      used.add(key);
+      break;
+    }
+  }
+  return normalizePointList(repaired);
+}
+
 function shuffledNeighborsNear(center, radius, rng) {
   const cells = [];
   for (let y = Math.max(0, center.y - radius); y <= Math.min(HEIGHT - 1, center.y + radius); y += 1) {
@@ -4262,7 +4283,7 @@ function createInitialWorld(settings = getInitialSettings()) {
   }
   addInitialBlocks(next, settings.initialBlockCount, rng);
   updateRegionalSubstrateBlockCounts(next, regionalSubstrate);
-  const generatedRivers = generateRiverPath(rng, { source: next });
+  let generatedRivers = generateRiverPath(rng, { source: next });
 
   placeInitialUnits(next, UNIT.HUMAN, settings.initialHumans, fieldCenters, {
     role: "normal",
@@ -4301,6 +4322,7 @@ function createInitialWorld(settings = getInitialSettings()) {
   currentInitialSettings = { ...settings };
   next.regionalSubstrate = cloneRegionalSubstrateLayout(regionalSubstrate);
   next.pointsOfInterest = createInitialPOIs(next);
+  generatedRivers = sanitizeRiverPathForWorld(generatedRivers, next);
   const generatedMountains = [];
   for (let y = 0; y < HEIGHT; y += 1) {
     for (let x = 0; x < WIDTH; x += 1) {
@@ -8461,6 +8483,421 @@ function summarizeProtoCultureForPlaceMemory(memory = placeMemory) {
   return summary;
 }
 
+const HUMAN_CULTURE_SUBJECT_ANCHOR_TYPES = Object.freeze(["seat", "village", "domain", "outpost", "old_seat", "remnant"]);
+const HUMAN_CULTURE_CONTEXT_ANCHOR_TYPES = Object.freeze(["poi", "scar", "beast_range", "river", "ordinary_place"]);
+const HUMAN_CULTURE_CANDIDATE_TYPES = Object.freeze({
+  RIVER_BOUND_POLITY: "river_bound_polity",
+  MEMORY_BOUND_LINEAGE: "memory_bound_lineage",
+  MONUMENT_CENTERED_POLITY: "monument_centered_polity",
+  FOREST_EDGE_POLITY: "forest_edge_polity",
+  FRONTIER_OUTPOST_POLITY: "frontier_outpost_polity",
+  SPLIT_LINEAGE_POLITY: "split_lineage_polity",
+});
+const HUMAN_CULTURE_CANDIDATE_DEFS = Object.freeze({
+  [HUMAN_CULTURE_CANDIDATE_TYPES.RIVER_BOUND_POLITY]: {
+    ownerType: "polity",
+    sourceHints: [PROTO_CULTURE_HINTS.RIVER_BOUND, PROTO_CULTURE_HINTS.SPRING_REFUGE],
+    primaryHint: PROTO_CULTURE_HINTS.RIVER_BOUND,
+  },
+  [HUMAN_CULTURE_CANDIDATE_TYPES.MEMORY_BOUND_LINEAGE]: {
+    ownerType: "lineage",
+    sourceHints: [PROTO_CULTURE_HINTS.MEMORY_BOUND, PROTO_CULTURE_HINTS.SEATLESS_DRIFT, PROTO_CULTURE_HINTS.SCAR_BOUND],
+    primaryHint: PROTO_CULTURE_HINTS.MEMORY_BOUND,
+  },
+  [HUMAN_CULTURE_CANDIDATE_TYPES.MONUMENT_CENTERED_POLITY]: {
+    ownerType: "polity",
+    sourceHints: [PROTO_CULTURE_HINTS.MONUMENT_CENTERED, PROTO_CULTURE_HINTS.MEMORY_BOUND, PROTO_CULTURE_HINTS.SCAR_BOUND],
+    primaryHint: PROTO_CULTURE_HINTS.MONUMENT_CENTERED,
+  },
+  [HUMAN_CULTURE_CANDIDATE_TYPES.FOREST_EDGE_POLITY]: {
+    ownerType: "polity",
+    sourceHints: [PROTO_CULTURE_HINTS.FOREST_EDGE, PROTO_CULTURE_HINTS.FRONTIER_ADAPTED],
+    primaryHint: PROTO_CULTURE_HINTS.FOREST_EDGE,
+  },
+  [HUMAN_CULTURE_CANDIDATE_TYPES.FRONTIER_OUTPOST_POLITY]: {
+    ownerType: "polity",
+    sourceHints: [PROTO_CULTURE_HINTS.FRONTIER_ADAPTED, PROTO_CULTURE_HINTS.SCAR_BOUND, PROTO_CULTURE_HINTS.FOREST_EDGE],
+    primaryHint: PROTO_CULTURE_HINTS.FRONTIER_ADAPTED,
+  },
+  [HUMAN_CULTURE_CANDIDATE_TYPES.SPLIT_LINEAGE_POLITY]: {
+    ownerType: "polity",
+    sourceHints: [PROTO_CULTURE_HINTS.SPLIT_LINEAGE, PROTO_CULTURE_HINTS.MEMORY_BOUND, PROTO_CULTURE_HINTS.SEATLESS_DRIFT],
+    primaryHint: PROTO_CULTURE_HINTS.SPLIT_LINEAGE,
+  },
+});
+
+function createEmptyHumanCultureCandidateSummary() {
+  return {
+    version: HUMAN_CULTURE_CANDIDATE_VERSION,
+    totalPolities: 0,
+    totalLineages: 0,
+    politiesWithCandidates: 0,
+    lineagesWithCandidates: 0,
+    candidateTypeCounts: {},
+    byPolity: [],
+    byLineage: [],
+    contextOnlySignals: [],
+  };
+}
+
+function compactCultureId(id) {
+  return typeof id === "string" && id ? id : null;
+}
+
+function looksLikeHumanPolityId(id) {
+  return typeof id === "string" && /^human_polity(_|$)/.test(id);
+}
+
+function looksLikeHumanLineageId(id) {
+  return typeof id === "string" && /^human_lineage(_|$)/.test(id);
+}
+
+function resolveCultureOwnerIdsForAnchor(anchor = {}, polityMemory = humanPolityMemory, lineageMemory = humanLineageMemory) {
+  const snapshot = anchor.currentSnapshot || {};
+  const remembered = normalizeRememberedHumanIdentity(snapshot.rememberedHumanIdentity || anchor.rememberedHumanIdentity || null);
+  const sourceId = compactCultureId(anchor.sourceRef?.id || anchor.sourceId || anchor.id || null);
+  const sourceVillage = sourceId ? (polityMemory?.villages || []).find((village) => village.id === sourceId) : null;
+  const sourceOutpost = sourceId ? (lineageMemory?.humanOutposts || []).find((outpost) => outpost.id === sourceId) : null;
+  const polityId = compactCultureId(snapshot.humanMemory?.polity?.id) ||
+    compactCultureId(snapshot.rememberedHumanIdentity?.polityId) ||
+    compactCultureId(remembered?.polityId) ||
+    compactCultureId(sourceVillage?.polityId) ||
+    compactCultureId(sourceOutpost?.polityId) ||
+    (looksLikeHumanPolityId(sourceId) ? sourceId : null);
+  const lineageId = compactCultureId(snapshot.humanMemory?.lineage?.id) ||
+    compactCultureId(snapshot.rememberedHumanIdentity?.lineageId) ||
+    compactCultureId(remembered?.lineageId) ||
+    compactCultureId(sourceVillage?.lineageId) ||
+    compactCultureId(sourceOutpost?.lineageId) ||
+    (looksLikeHumanLineageId(sourceId) ? sourceId : null);
+  return {
+    polityId,
+    lineageId,
+    rootPolityId: compactCultureId(snapshot.humanMemory?.polity?.rootPolityId) ||
+      compactCultureId(snapshot.rememberedHumanIdentity?.rootPolityId) ||
+      compactCultureId(remembered?.rootPolityId) ||
+      polityId,
+    rootLineageId: compactCultureId(snapshot.humanMemory?.lineage?.rootLineageId) ||
+      compactCultureId(snapshot.rememberedHumanIdentity?.rootLineageId) ||
+      compactCultureId(remembered?.rootLineageId) ||
+      lineageId,
+  };
+}
+
+function classifyCultureEvidenceRole(anchor = {}, polityMemory = humanPolityMemory, lineageMemory = humanLineageMemory) {
+  const anchorType = anchor.type || anchor.sourceRef?.kind || "ordinary_place";
+  const owners = resolveCultureOwnerIdsForAnchor(anchor, polityMemory, lineageMemory);
+  if (HUMAN_CULTURE_SUBJECT_ANCHOR_TYPES.includes(anchorType) && (owners.polityId || owners.lineageId)) return "subject";
+  if (HUMAN_CULTURE_CONTEXT_ANCHOR_TYPES.includes(anchorType) || !owners.polityId && !owners.lineageId) return "context";
+  return "context";
+}
+
+function cultureAnchorRef(anchor = {}) {
+  const type = anchor.type || anchor.sourceRef?.kind || "place";
+  const id = anchor.sourceRef?.id || anchor.sourceId || anchor.id || "unknown";
+  return `${type}:${id}`;
+}
+
+function strongestAnchorHintScore(anchor = {}, hintIds = []) {
+  const scores = getAnchorProtoCultureScores(anchor);
+  let best = 0;
+  for (const id of hintIds) best = Math.max(best, scores[id] || 0);
+  return Number(best.toFixed(2));
+}
+
+function anchorHasAnyCultureHint(anchor = {}, hintIds = []) {
+  return strongestAnchorHintScore(anchor, hintIds) > 0;
+}
+
+function anchorHasStableCultureHint(anchor = {}, hintIds = []) {
+  const stableHints = Array.isArray(anchor.protoCultureMemory?.stableHints) ? anchor.protoCultureMemory.stableHints : [];
+  if (stableHints.some((id) => hintIds.includes(id))) return true;
+  const signals = anchor.protoCultureMemory?.signals || {};
+  return hintIds.some((id) => (signals[id]?.score || 0) >= 0.65 && (signals[id]?.samples || 0) >= 2);
+}
+
+function anchorHasActiveCultureHint(anchor = {}, hintIds = []) {
+  const activeHints = Array.isArray(anchor.protoCultureMemory?.activeHints) ? anchor.protoCultureMemory.activeHints : [];
+  if (activeHints.some((id) => hintIds.includes(id))) return true;
+  return strongestAnchorHintScore(anchor, hintIds) >= 0.35;
+}
+
+function extractCultureCandidateEvidenceFromAnchor(anchor = {}, polityMemory = humanPolityMemory, lineageMemory = humanLineageMemory) {
+  const owners = resolveCultureOwnerIdsForAnchor(anchor, polityMemory, lineageMemory);
+  const snapshot = anchor.currentSnapshot || {};
+  const remembered = normalizeRememberedHumanIdentity(snapshot.rememberedHumanIdentity || anchor.rememberedHumanIdentity || null);
+  return {
+    anchor,
+    anchorRef: cultureAnchorRef(anchor),
+    anchorType: anchor.type || anchor.sourceRef?.kind || "ordinary_place",
+    displayName: anchor.displayName || anchor.type || "place",
+    role: classifyCultureEvidenceRole(anchor, polityMemory, lineageMemory),
+    owners,
+    scores: getAnchorProtoCultureScores(anchor),
+    stableHints: Array.isArray(anchor.protoCultureMemory?.stableHints) ? anchor.protoCultureMemory.stableHints.slice() : [],
+    activeHints: Array.isArray(anchor.protoCultureMemory?.activeHints) ? anchor.protoCultureMemory.activeHints.slice() : [],
+    semanticTraits: Array.isArray(snapshot.semanticTraits) ? snapshot.semanticTraits.slice() : [],
+    placeArchetype: snapshot.placeArchetype || null,
+    poiType: snapshot.poi?.type || null,
+    humanMemory: snapshot.humanMemory || null,
+    rememberedHumanIdentity: remembered,
+  };
+}
+
+function cultureOwnerFromPolity(polityId, polityMemory = humanPolityMemory, evidence = []) {
+  const polity = (polityMemory?.polities || []).find((item) => item.id === polityId) || null;
+  const sample = evidence.find((item) => item.owners.polityId === polityId);
+  const human = sample?.humanMemory || {};
+  const remembered = sample?.rememberedHumanIdentity || {};
+  return {
+    ownerType: "polity",
+    ownerId: polityId,
+    state: polity?.state || human.polity?.state || remembered.polityState || null,
+    rootLineageId: polity?.rootLineageId || human.lineage?.rootLineageId || remembered.rootLineageId || null,
+    rootPolityId: polity?.rootPolityId || human.polity?.rootPolityId || remembered.rootPolityId || polityId,
+    splitFromPolityId: polity?.splitFromPolityId || human.polity?.parentPolityId || null,
+    polityAncestryIds: polity ? polityAncestryIds(polity) : human.polity?.ancestryIds || remembered.polityAncestryIds || [],
+    lineageAncestryIds: human.lineage?.ancestryIds || remembered.lineageAncestryIds || [],
+  };
+}
+
+function cultureOwnerFromLineage(lineageId, lineageMemory = humanLineageMemory, evidence = []) {
+  const lineage = (lineageMemory?.lineages || []).find((item) => item.id === lineageId) || null;
+  const sample = evidence.find((item) => item.owners.lineageId === lineageId);
+  const human = sample?.humanMemory || {};
+  const remembered = sample?.rememberedHumanIdentity || {};
+  return {
+    ownerType: "lineage",
+    ownerId: lineageId,
+    state: lineage?.state || null,
+    rootLineageId: lineage?.rootLineageId || human.lineage?.rootLineageId || remembered.rootLineageId || lineageId,
+    rootPolityId: human.polity?.rootPolityId || remembered.rootPolityId || null,
+    splitFromPolityId: human.polity?.parentPolityId || null,
+    polityAncestryIds: human.polity?.ancestryIds || remembered.polityAncestryIds || [],
+    lineageAncestryIds: lineage ? lineageAncestryIds(lineage) : human.lineage?.ancestryIds || remembered.lineageAncestryIds || [],
+  };
+}
+
+function topCultureScores(items = [], hintIds = []) {
+  return items
+    .map((item) => Math.max(...hintIds.map((id) => item.scores[id] || 0), 0))
+    .filter((score) => score > 0)
+    .sort((a, b) => b - a)
+    .slice(0, 3);
+}
+
+function averageCultureScores(scores = []) {
+  if (!scores.length) return 0;
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+function cultureEvidenceForCandidate(candidateType, owner, ownerEvidence = [], contextEvidence = []) {
+  const def = HUMAN_CULTURE_CANDIDATE_DEFS[candidateType];
+  const hintIds = def.sourceHints;
+  const subject = ownerEvidence.filter((item) => anchorHasAnyCultureHint(item.anchor, hintIds));
+  const context = contextEvidence.filter((item) =>
+    HUMAN_CULTURE_CONTEXT_ANCHOR_TYPES.includes(item.anchorType) &&
+    anchorHasAnyCultureHint(item.anchor, hintIds)
+  );
+  return { subject, context, hintIds };
+}
+
+function cultureCandidateMeetsTypeRequirement(candidateType, owner, evidence) {
+  const { subject, context, hintIds } = evidence;
+  if (!subject.length) return false;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.RIVER_BOUND_POLITY) {
+    return subject.length >= 2;
+  }
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.MEMORY_BOUND_LINEAGE) {
+    return Boolean(owner.ownerId) && subject.some((item) => ["old_seat", "remnant", "seat", "village", "domain"].includes(item.anchorType));
+  }
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.MONUMENT_CENTERED_POLITY) {
+    const monumentSubject = subject.some((item) => (item.scores[PROTO_CULTURE_HINTS.MONUMENT_CENTERED] || 0) > 0);
+    const monumentContext = context.some((item) => item.poiType === POI_TYPES.MONUMENT || item.semanticTraits.includes(SEMANTIC_TRAITS.MONUMENT_SHADOWED));
+    return monumentSubject && (subject.length >= 2 || monumentContext);
+  }
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.FOREST_EDGE_POLITY) {
+    const forestSubject = subject.some((item) => (item.scores[PROTO_CULTURE_HINTS.FOREST_EDGE] || 0) > 0);
+    const forestContext = context.some((item) => item.poiType === POI_TYPES.GREAT_FOREST || item.anchorType === "beast_range" || item.semanticTraits.includes(SEMANTIC_TRAITS.GREAT_FOREST_NEARBY));
+    return forestSubject && (subject.length >= 2 || forestContext);
+  }
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.FRONTIER_OUTPOST_POLITY) {
+    return subject.some((item) => item.anchorType === "outpost") &&
+      subject.some((item) => anchorHasStableCultureHint(item.anchor, [PROTO_CULTURE_HINTS.FRONTIER_ADAPTED]) || anchorHasActiveCultureHint(item.anchor, [PROTO_CULTURE_HINTS.FRONTIER_ADAPTED]));
+  }
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.SPLIT_LINEAGE_POLITY) {
+    const splitSignals = Boolean(owner.splitFromPolityId) ||
+      (Array.isArray(owner.polityAncestryIds) && owner.polityAncestryIds.length > 1) ||
+      (owner.rootPolityId && owner.ownerId && owner.rootPolityId !== owner.ownerId) ||
+      subject.some((item) => item.semanticTraits.includes(SEMANTIC_TRAITS.SPLIT_POLITY));
+    return splitSignals && subject.some((item) => anchorHasAnyCultureHint(item.anchor, hintIds));
+  }
+  return false;
+}
+
+function scoreCultureCandidateSignal(candidateType, evidence) {
+  const subjectScores = topCultureScores(evidence.subject, evidence.hintIds);
+  if (!subjectScores.length) return { score: 0, status: null };
+  const contextScores = topCultureScores(evidence.context, evidence.hintIds);
+  const stableSubjectEvidenceCount = evidence.subject.filter((item) => anchorHasStableCultureHint(item.anchor, evidence.hintIds)).length;
+  const base = averageCultureScores(subjectScores);
+  const coverageBonus = Math.min(0.2, 0.08 * Math.max(0, evidence.subject.length - 1));
+  const stableBonus = stableSubjectEvidenceCount > 0 ? 0.1 : 0;
+  const contextBonus = Math.min(0.15, averageCultureScores(contextScores) * 0.2);
+  const score = Number(Math.min(1, Math.max(0, base + coverageBonus + stableBonus + contextBonus)).toFixed(2));
+  const status = score >= 0.65 && evidence.subject.length >= 2 && stableSubjectEvidenceCount >= 1
+    ? "candidate"
+    : score >= 0.35 && evidence.subject.length >= 1
+      ? "emerging"
+      : null;
+  return { score, status };
+}
+
+function cultureCandidateReason(candidateType, status) {
+  const prefix = status === "candidate" ? "Stable" : "Emerging";
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.RIVER_BOUND_POLITY) return `${prefix} Human seat and village evidence repeatedly show river-bound traits.`;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.MEMORY_BOUND_LINEAGE) return `${prefix} Human lineage evidence repeatedly preserves old-seat or remnant memory.`;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.MONUMENT_CENTERED_POLITY) return `${prefix} Human polity evidence is repeatedly observed with Monument-centered memory.`;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.FOREST_EDGE_POLITY) return `${prefix} Human polity evidence is repeatedly observed at forest or WILD edges.`;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.FRONTIER_OUTPOST_POLITY) return `${prefix} Human outpost evidence repeatedly shows frontier adaptation.`;
+  if (candidateType === HUMAN_CULTURE_CANDIDATE_TYPES.SPLIT_LINEAGE_POLITY) return `${prefix} Human polity evidence shows split ancestry signals.`;
+  return `${prefix} Human culture candidate evidence was observed.`;
+}
+
+function createCultureCandidateSignal(candidateType, owner, evidence) {
+  if (!cultureCandidateMeetsTypeRequirement(candidateType, owner, evidence)) return null;
+  const scored = scoreCultureCandidateSignal(candidateType, evidence);
+  if (!scored.status) return null;
+  const def = HUMAN_CULTURE_CANDIDATE_DEFS[candidateType];
+  const sourceHints = def.sourceHints.filter((id) =>
+    evidence.subject.some((item) => (item.scores[id] || 0) > 0) ||
+    evidence.context.some((item) => (item.scores[id] || 0) > 0)
+  );
+  return {
+    score: scored.score,
+    status: scored.status,
+    primaryHint: def.primaryHint,
+    subjectEvidenceAnchors: evidence.subject
+      .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
+      .slice(0, 6)
+      .map((item) => item.anchorRef),
+    contextEvidenceAnchors: evidence.context
+      .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
+      .slice(0, 4)
+      .map((item) => item.anchorRef),
+    evidenceCounts: {
+      subject: evidence.subject.length,
+      context: evidence.context.length,
+      stableSubject: evidence.subject.filter((item) => anchorHasStableCultureHint(item.anchor, evidence.hintIds)).length,
+      activeSubject: evidence.subject.filter((item) => anchorHasActiveCultureHint(item.anchor, evidence.hintIds)).length,
+    },
+    sourceHints: sourceHints.slice(0, 4),
+    reason: cultureCandidateReason(candidateType, scored.status),
+  };
+}
+
+function compactCultureCandidateOwner(owner, signals) {
+  const entries = Object.entries(signals || {})
+    .filter(([, signal]) => signal?.status)
+    .sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0]))
+    .slice(0, 4);
+  return {
+    ownerType: owner.ownerType,
+    ownerId: owner.ownerId,
+    state: owner.state || null,
+    rootLineageId: owner.rootLineageId || null,
+    rootPolityId: owner.rootPolityId || null,
+    topCandidates: entries.map(([candidateType]) => candidateType),
+    candidateSignals: Object.fromEntries(entries),
+  };
+}
+
+function compactContextOnlyCultureSignal(item) {
+  const strongest = Object.entries(item.scores || {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || [null, 0];
+  const reason = HUMAN_CULTURE_SUBJECT_ANCHOR_TYPES.includes(item.anchorType)
+    ? "Human-looking subject evidence had no resolved polity or lineage owner."
+    : "Context evidence cannot own a Human culture candidate.";
+  return {
+    anchorRef: item.anchorRef,
+    anchorType: item.anchorType,
+    displayName: item.displayName,
+    strongestHint: strongest[0],
+    score: Number((strongest[1] || 0).toFixed(2)),
+    ignoredAsOwner: true,
+    reason,
+  };
+}
+
+function summarizeHumanCultureCandidatesForPlaceMemory(memory = placeMemory, polityMemory = humanPolityMemory, lineageMemory = humanLineageMemory) {
+  const summary = createEmptyHumanCultureCandidateSummary();
+  const anchors = Array.isArray(memory?.anchors) ? memory.anchors : [];
+  const evidenceItems = anchors
+    .filter((anchor) => hasAnchorProtoCulture(anchor))
+    .map((anchor) => extractCultureCandidateEvidenceFromAnchor(anchor, polityMemory, lineageMemory));
+  const subjectEvidence = evidenceItems.filter((item) => item.role === "subject");
+  const contextEvidence = evidenceItems.filter((item) => item.role === "context");
+  const polityIds = new Set((polityMemory?.polities || []).map((item) => item.id).filter(Boolean));
+  const lineageIds = new Set((lineageMemory?.lineages || []).map((item) => item.id).filter(Boolean));
+
+  for (const item of subjectEvidence) {
+    if (item.owners.polityId) polityIds.add(item.owners.polityId);
+    if (item.owners.lineageId) lineageIds.add(item.owners.lineageId);
+  }
+  summary.totalPolities = polityIds.size;
+  summary.totalLineages = lineageIds.size;
+
+  const byPolity = [];
+  const byLineage = [];
+  const candidateTypeCounts = {};
+  for (const polityId of Array.from(polityIds).sort()) {
+    const ownerEvidence = subjectEvidence.filter((item) => item.owners.polityId === polityId);
+    if (!ownerEvidence.length) continue;
+    const owner = cultureOwnerFromPolity(polityId, polityMemory, ownerEvidence);
+    const signals = {};
+    for (const candidateType of Object.values(HUMAN_CULTURE_CANDIDATE_TYPES).filter((type) => HUMAN_CULTURE_CANDIDATE_DEFS[type].ownerType === "polity")) {
+      const evidence = cultureEvidenceForCandidate(candidateType, owner, ownerEvidence, contextEvidence);
+      const signal = createCultureCandidateSignal(candidateType, owner, evidence);
+      if (signal) signals[candidateType] = signal;
+    }
+    if (Object.keys(signals).length) {
+      for (const type of Object.keys(signals)) incrementSummaryCount(candidateTypeCounts, type);
+      byPolity.push(compactCultureCandidateOwner(owner, signals));
+    }
+  }
+  for (const lineageId of Array.from(lineageIds).sort()) {
+    const ownerEvidence = subjectEvidence.filter((item) => item.owners.lineageId === lineageId);
+    if (!ownerEvidence.length) continue;
+    const owner = cultureOwnerFromLineage(lineageId, lineageMemory, ownerEvidence);
+    const signals = {};
+    for (const candidateType of Object.values(HUMAN_CULTURE_CANDIDATE_TYPES).filter((type) => HUMAN_CULTURE_CANDIDATE_DEFS[type].ownerType === "lineage")) {
+      const evidence = cultureEvidenceForCandidate(candidateType, owner, ownerEvidence, contextEvidence);
+      const signal = createCultureCandidateSignal(candidateType, owner, evidence);
+      if (signal) signals[candidateType] = signal;
+    }
+    if (Object.keys(signals).length) {
+      for (const type of Object.keys(signals)) incrementSummaryCount(candidateTypeCounts, type);
+      byLineage.push(compactCultureCandidateOwner(owner, signals));
+    }
+  }
+
+  summary.byPolity = byPolity
+    .sort((a, b) => Math.max(...Object.values(b.candidateSignals).map((signal) => signal.score), 0) - Math.max(...Object.values(a.candidateSignals).map((signal) => signal.score), 0) || a.ownerId.localeCompare(b.ownerId))
+    .slice(0, 12);
+  summary.byLineage = byLineage
+    .sort((a, b) => Math.max(...Object.values(b.candidateSignals).map((signal) => signal.score), 0) - Math.max(...Object.values(a.candidateSignals).map((signal) => signal.score), 0) || a.ownerId.localeCompare(b.ownerId))
+    .slice(0, 12);
+  summary.politiesWithCandidates = summary.byPolity.length;
+  summary.lineagesWithCandidates = summary.byLineage.length;
+  summary.candidateTypeCounts = sortedCountObject(candidateTypeCounts);
+  summary.contextOnlySignals = contextEvidence
+    .filter((item) => Object.keys(item.scores || {}).length > 0)
+    .sort((a, b) => strongestProtoCultureScore(b.anchor) - strongestProtoCultureScore(a.anchor) || a.anchorRef.localeCompare(b.anchorRef))
+    .slice(0, 8)
+    .map(compactContextOnlyCultureSignal);
+  return summary;
+}
+
 function snapshotPlace(anchorOrTarget = {}, source = world, radius = 2) {
   const x = Math.round(anchorOrTarget.x ?? anchorOrTarget.position?.x ?? 0);
   const y = Math.round(anchorOrTarget.y ?? anchorOrTarget.position?.y ?? 0);
@@ -9883,6 +10320,7 @@ function compactPlaceMemory() {
     anchors: placeMemory.anchors,
     wakeReports: placeMemory.wakeReports,
     protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
+    humanCultureCandidateSummary: summarizeHumanCultureCandidatesForPlaceMemory(placeMemory),
   }));
 }
 
@@ -9935,6 +10373,7 @@ function createProtoCultureSummaryExport() {
     },
     placeMemory: {
       protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
+      humanCultureCandidateSummary: summarizeHumanCultureCandidatesForPlaceMemory(placeMemory),
       compactAnchors,
     },
   }));
@@ -10056,6 +10495,7 @@ function inspectCurrentTickPlaces(options = {}) {
     items,
     placeMemory: {
       protoCultureSummary: summarizeProtoCultureForPlaceMemory(placeMemory),
+      humanCultureCandidateSummary: summarizeHumanCultureCandidatesForPlaceMemory(placeMemory),
     },
   };
   showCurrentPlaceReviewPanel(review);
@@ -10079,6 +10519,13 @@ function aggregateStrongestExamples(target, source) {
         String(a.anchorId || "").localeCompare(String(b.anchorId || "")))
       .slice(0, 5);
   }
+}
+
+function aggregateHumanCultureCandidateTotals(target, summary = {}) {
+  if (!summary) return;
+  target.totalPolitiesWithCandidates += summary.politiesWithCandidates || 0;
+  target.totalLineagesWithCandidates += summary.lineagesWithCandidates || 0;
+  mergeCountObjects(target.candidateTypeCounts, summary.candidateTypeCounts || {});
 }
 
 function humanFallbackAuditTargets(source = world) {
@@ -10195,6 +10642,11 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
     anchorTypeWithHintCounts: {},
     nonHumanAnchorWithHints: 0,
     strongestExamplesByHint: Object.fromEntries(Object.values(PROTO_CULTURE_HINTS).map((id) => [id, []])),
+    humanCultureCandidateTotals: {
+      totalPolitiesWithCandidates: 0,
+      totalLineagesWithCandidates: 0,
+      candidateTypeCounts: {},
+    },
   };
 
   try {
@@ -10224,12 +10676,14 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
         }
 
         const protoCultureSummary = summarizeProtoCultureForPlaceMemory(placeMemory);
+        const humanCultureCandidateSummary = summarizeHumanCultureCandidatesForPlaceMemory(placeMemory);
         return {
           seed,
           startTick,
           endTick: tick,
           inspectedAnchors: placeMemory.anchors.length,
           protoCultureSummary,
+          humanCultureCandidateSummary,
           strongestExamplesByHint: protoCultureSummary.strongestExamplesByHint,
           finalCounts: countWorld(world),
           inspectionLog,
@@ -10242,11 +10696,13 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
       mergeCountObjects(aggregate.anchorTypeWithHintCounts, run.protoCultureSummary.anchorTypeWithHintCounts);
       aggregate.nonHumanAnchorWithHints += run.protoCultureSummary.nonHumanAnchorWithHints || 0;
       aggregateStrongestExamples(aggregate.strongestExamplesByHint, run.protoCultureSummary.strongestExamplesByHint);
+      aggregateHumanCultureCandidateTotals(aggregate.humanCultureCandidateTotals, run.humanCultureCandidateSummary);
     }
     aggregate.primaryHintCounts = sortedCountObject(aggregate.primaryHintCounts);
     aggregate.stableHintCounts = sortedCountObject(aggregate.stableHintCounts);
     aggregate.activeHintCounts = sortedCountObject(aggregate.activeHintCounts);
     aggregate.anchorTypeWithHintCounts = sortedCountObject(aggregate.anchorTypeWithHintCounts);
+    aggregate.humanCultureCandidateTotals.candidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.candidateTypeCounts);
     return JSON.parse(JSON.stringify({
       version: PROTO_CULTURE_EXPORT_VERSION,
       ticks: ticksToRun,
@@ -11211,6 +11667,7 @@ window.__triSpeciesSim = {
   SEMANTIC_TRAITS,
   PLACE_ARCHETYPES,
   PROTO_CULTURE_HINTS,
+  HUMAN_CULTURE_CANDIDATE_TYPES,
   EXPLORE_CONFIG: {
     cols: EXPLORE_VIEWPORT_COLS,
     rows: EXPLORE_VIEWPORT_ROWS,
@@ -11337,6 +11794,12 @@ window.__triSpeciesSim = {
   },
   summarizeProtoCultureForPlaceMemoryForTest(memory) {
     return JSON.parse(JSON.stringify(summarizeProtoCultureForPlaceMemory(memory)));
+  },
+  summarizeHumanCultureCandidatesForPlaceMemoryForTest(memory, polityMemory = humanPolityMemory, lineageMemory = humanLineageMemory) {
+    return JSON.parse(JSON.stringify(summarizeHumanCultureCandidatesForPlaceMemory(memory, polityMemory, lineageMemory)));
+  },
+  resolveCultureOwnerIdsForAnchorForTest(anchor) {
+    return JSON.parse(JSON.stringify(resolveCultureOwnerIdsForAnchor(anchor)));
   },
   createProtoCultureSummaryExport,
   exportProtoCultureSummaryJson,

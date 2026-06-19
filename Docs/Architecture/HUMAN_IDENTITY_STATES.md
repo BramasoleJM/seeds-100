@@ -66,3 +66,13 @@ These traits do not feed back into Human identity detection.
 Proto-culture hints may read Human identity snapshots as observer-only interpretation input.
 
 They must not affect lineage, polity, village, outpost, seat, old seat, remnant, or ownership detection. Remembered Human identity may contribute to memory-oriented hints, but it must not create current ownership.
+
+## V0.14C Relation
+
+Human culture candidate summaries may read current and remembered Human polity / lineage ids from Place Memory anchors.
+
+Only Human polity or Human lineage ids can own candidate signals. POIs, scars, rivers, springs, forests, Beast ranges, and ordinary places are context only.
+
+`humanCultureCandidateSummary` is derived for exports and review. It must not affect lineage, polity, village, outpost, seat, old seat, remnant, ownership detection, proto-culture hint scoring, proto-culture memory updates, wake reports, or any H/B/S ecology rule.
+
+Only `emerging` and `candidate` statuses exist. No civilization module, civilization gameplay effect, AI, resource economy, building layer, NPC, quest, story event, myth event, tarot mechanic, new terrain, or new unit is implemented.
