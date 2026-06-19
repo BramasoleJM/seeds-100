@@ -43,6 +43,27 @@ When acting as Executor:
 
 ---
 
+## Observer-only interpretation policy
+
+Observer-only interpretation layers are allowed only when explicitly requested.
+
+Observer-only fields may include:
+
+```text
+semanticTraits
+placeArchetype
+interpretationHints
+rememberedHumanIdentity
+protoCultureHints
+protoCultureMemory
+```
+
+These fields must not change H/B/S ecology, tick order, movement, lifecycle, conflict, conversion, terrain rewrite, reproduction, fertility, POI effects, river blockers, terrain types, unit types, terrain decay, or Explore movement.
+
+Proto-culture hints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, or tarot mechanics.
+
+---
+
 ## Do not add yet
 
 Do not add:

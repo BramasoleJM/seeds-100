@@ -4,6 +4,8 @@ V0.14A traits are deterministic, observer-only, and derived from existing Place 
 
 V0.14A.1 allows Human place anchors to expose compact `rememberedHumanIdentity` after current polity / lineage identity disappears. Remembered identity may add memory traits such as `inherited_memory` or `collapsed_memory`, but it must not add `polity_owned` unless current `humanMemory.polity.id` exists.
 
+V0.14B `protoCultureHints` consume `semanticTraits` as input, but must not feed back into semantic trait derivation. No new semantic traits are required for V0.14B.
+
 | Trait id | Group | Meaning | Derivation signal | False-positive risk | Player-facing text | Observer-only note |
 |---|---|---|---|---|---|---|
 | river_adjacent | geography | River feature is in the sampled place radius. | `ecology.riverCells > 0` | A river edge may only touch the place. | yes | Does not change river behavior. |

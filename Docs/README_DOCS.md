@@ -23,22 +23,16 @@ AGENTS.md
 ## Active Docs
 
 ```text
-Docs/Current/TRI_SPECIES_WORLD_SIM_V0_9_3_STAGE_SUMMARY_CN.md
+Docs/Architecture/ARCHITECTURE_MAP.md
+Docs/Architecture/OBJECT_SCHEMA.md
+Docs/Architecture/SEMANTIC_TRAITS.md
+Docs/Architecture/PLACE_ARCHETYPES.md
+Docs/Architecture/MACRO_PATTERNS.md
+Docs/Architecture/HUMAN_IDENTITY_STATES.md
+Docs/Architecture/PROTO_CULTURE_HINTS.md
 ```
 
-Current sealed stage summary. V0.9.3 is the stable Macro View build.
-
-```text
-Docs/Current/TRI_SPECIES_WORLD_SIM_V0_10_STAGE_PLAN_CN.md
-```
-
-Current next-stage plan. V0.10 should focus on Regional Substrate, not multi-screen Zelda.
-
-```text
-Docs/Plan Memory/TRI_SPECIES_WORLDSIM_V0_10_SIDE_CHAT_MEMORY_CN.md
-```
-
-Active planning memory for V0.10. This is the most important discussion record for basin/refuge/hollow, soft constraints, and regional resilience.
+These architecture docs describe the current observer layers and the V0.14B direction.
 
 ---
 
@@ -96,31 +90,21 @@ Stable snapshots and backup zips. Do not edit backup contents during normal deve
 Current completed stage:
 
 ```text
-TRI_SPECIES_WORLD_SIM_V0.9.3_MACRO_VIEW_STABILITY
+TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
 ```
 
 Recommended next stage:
 
 ```text
-V0.10 Regional Substrate Prototype
+V0.14B Observer-Only Proto-Culture Hints
 ```
 
-V0.10 should add a hidden single-screen regional bias layer:
+V0.14B should add compact `protoCultureHints` and anchor-level `protoCultureMemory` to Place Memory for Human-related inspected places.
 
 ```text
-basin  = Settlement Basin
-refuge = Wild Refuge
-hollow = Scar Hollow
-none   = normal region
+protoCultureHints are observer-only interpretation signals.
+protoCultureHints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, or tarot mechanics.
+protoCultureHints must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
 ```
 
-The goal is soft geographic influence, not hard scripting:
-
-```text
-basin makes settlement more likely.
-refuge makes WILD / Beast recovery more likely.
-hollow makes MARK / scar traces more persistent.
-Macro View explains the results.
-```
-
-Do not add multi-screen maps, NPCs, quests, resource economy, buildings, tarot mechanics, save/load, network calls, or external libraries yet.
+Do not add multi-screen maps, NPCs, quests, resource economy, buildings, civilization gameplay, AI calls, tarot mechanics, save/load, network calls, or external libraries yet.

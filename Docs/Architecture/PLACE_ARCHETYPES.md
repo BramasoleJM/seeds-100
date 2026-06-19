@@ -2,6 +2,8 @@
 
 V0.14A assigns one primary archetype per Place Snapshot. Archetypes are observer-only labels derived from semantic traits.
 
+V0.14B `protoCultureHints` may read `placeArchetype` as one input signal, but V0.14B must not change archetype priority or derivation.
+
 ## Priority Order
 
 1. `pressured_seat`

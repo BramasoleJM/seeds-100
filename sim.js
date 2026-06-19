@@ -10,13 +10,14 @@ const EXPLORE_PLAYER_RADIUS = 0.32;
 const EXPLORE_SLEEP_TICK_MS = 140;
 const EXPLORE_SLEEP_TICKS_PER_REST = 30;
 const MAP_SEED_VERSION = "0.13.1";
-const PLACE_MEMORY_VERSION = "0.14A";
+const PLACE_MEMORY_VERSION = "0.14B";
 const PLACE_STATE_STATUSES = new Set(["emerging", "active", "expanding", "shrinking", "contested", "corrupted", "recovering", "abandoned", "remnant", "stable"]);
 const PLACE_STATE_TRENDS = new Set(["growing", "declining", "holding", "unstable", "silent"]);
 const PLACE_PRESSURES = new Set(["human", "beast", "spirit", "rot", "water", "forest", "mixed", "none"]);
 const PLACE_CHANGE_CATEGORIES = new Set(["human_expanded", "human_shrank", "village_emerged", "village_lost", "seat_moved", "polity_split", "polity_collapsed", "polity_recovered", "ownership_changed", "rot_spread", "rot_receded", "forest_expanded", "forest_thinned", "water_recovered_land", "poi_contested", "no_significant_change"]);
 const PLACE_CHANGE_SUBJECTS = new Set(["human", "polity", "lineage", "village", "seat", "poi", "rot", "forest", "water", "mixed"]);
 const PLACE_CHANGE_DIRECTIONS = new Set(["growing", "declining", "holding", "unstable", "moved", "split", "collapsed", "recovered", "none"]);
+const PROTO_CULTURE_MEMORY_VERSION = "0.14B";
 const SEMANTIC_TRAITS = Object.freeze({
   RIVER_ADJACENT: "river_adjacent",
   RIVER_CENTER: "river_center",
@@ -69,6 +70,17 @@ const PLACE_ARCHETYPES = Object.freeze({
   FERTILE_REFUGE: "fertile_refuge",
   CONTESTED_POI: "contested_poi",
   ORDINARY_PLACE: "ordinary_place",
+});
+const PROTO_CULTURE_HINTS = Object.freeze({
+  RIVER_BOUND: "river_bound",
+  FOREST_EDGE: "forest_edge",
+  MEMORY_BOUND: "memory_bound",
+  SCAR_BOUND: "scar_bound",
+  FRONTIER_ADAPTED: "frontier_adapted",
+  MONUMENT_CENTERED: "monument_centered",
+  SPRING_REFUGE: "spring_refuge",
+  SPLIT_LINEAGE: "split_lineage",
+  SEATLESS_DRIFT: "seatless_drift",
 });
 const RIVER_FERTILITY_RESTORE_CHANCE = 0.10;
 const RIVER_FERTILITY_MAX = 3;
@@ -3069,23 +3081,25 @@ function completeSleepObservation(source = world) {
     if (!anchor) continue;
     const before = currentSleepObservation.beforeSnapshots[id] || anchor.currentSnapshot;
     const after = snapshotPlace(anchor, source);
-    const change = computePlaceChange(anchor, before, after);
     anchor.previousSnapshot = anchor.currentSnapshot;
     anchor.currentSnapshot = after;
     updateRememberedHumanIdentity(anchor, anchor.currentSnapshot);
     if (anchor.rememberedHumanIdentity && !anchor.currentSnapshot.rememberedHumanIdentity) {
       anchor.currentSnapshot.rememberedHumanIdentity = JSON.parse(JSON.stringify(anchor.rememberedHumanIdentity));
+      anchor.currentSnapshot.protoCultureHints = deriveProtoCultureHints(anchor.currentSnapshot, anchor.currentSnapshot.semanticTraits, anchor.currentSnapshot.placeArchetype, anchor);
     }
-    anchor.changeSinceLastSleep = change;
+    anchor.protoCultureMemory = updateProtoCultureMemory(anchor.protoCultureMemory, anchor.currentSnapshot.protoCultureHints || [], tick);
+    const updatedChange = computePlaceChange(anchor, before, after);
+    anchor.changeSinceLastSleep = updatedChange;
     anchor.lastSleepObservedTick = tick;
-    if (!change.visibleToPlayer) continue;
+    if (!updatedChange.visibleToPlayer) continue;
     entries.push({
       anchorId: anchor.id,
       displayName: anchor.displayName,
       type: anchor.type,
       position: anchor.position,
-      playerText: change.playerText,
-      llmContext: change.llmContext,
+      playerText: updatedChange.playerText,
+      llmContext: updatedChange.llmContext,
     });
   }
   const report = {
@@ -7920,6 +7934,228 @@ function derivePlaceInterpretationHints(snapshot, semanticTraits = [], placeArch
   return hints.slice(0, 5);
 }
 
+function protoCultureStrengthForScore(score) {
+  if (score >= 0.65) return "strong";
+  if (score >= 0.35) return "emerging";
+  return "weak";
+}
+
+function isHumanRelatedPlaceSnapshot(snapshot, semanticTraits = snapshot?.semanticTraits || []) {
+  const traits = semanticTraits || [];
+  return hasAnyTrait(traits, [
+    SEMANTIC_TRAITS.HUMAN_SETTLED,
+    SEMANTIC_TRAITS.HUMAN_SEAT,
+    SEMANTIC_TRAITS.HUMAN_OLD_SEAT,
+    SEMANTIC_TRAITS.HUMAN_OUTPOST,
+    SEMANTIC_TRAITS.HUMAN_REMNANT,
+    SEMANTIC_TRAITS.HUMAN_DOMAIN,
+    SEMANTIC_TRAITS.POLITY_OWNED,
+    SEMANTIC_TRAITS.LINEAGE_CONTINUITY,
+  ]) || Boolean(snapshot?.humanMemory || snapshot?.rememberedHumanIdentity);
+}
+
+function compactProtoCultureSourceTraits(sourceTraits = []) {
+  const compact = [];
+  for (const trait of sourceTraits) {
+    if (trait && !compact.includes(trait)) compact.push(trait);
+    if (compact.length >= 5) break;
+  }
+  return compact;
+}
+
+function normalizeProtoCultureHint(hint) {
+  if (!hint || !Object.values(PROTO_CULTURE_HINTS).includes(hint.id)) return null;
+  const score = Number(Math.min(1, Math.max(0, hint.score || 0)).toFixed(2));
+  return {
+    id: hint.id,
+    score,
+    strength: protoCultureStrengthForScore(score),
+    sourceTraits: compactProtoCultureSourceTraits(hint.sourceTraits || []),
+    sourceArchetype: hint.sourceArchetype || PLACE_ARCHETYPES.ORDINARY_PLACE,
+    reason: hint.reason || "Human place has compact proto-culture signals.",
+  };
+}
+
+function deriveProtoCultureHints(snapshot, semanticTraits = snapshot?.semanticTraits || [], placeArchetype = snapshot?.placeArchetype || PLACE_ARCHETYPES.ORDINARY_PLACE, target = null) {
+  const traits = semanticTraits || [];
+  if (!isHumanRelatedPlaceSnapshot(snapshot, traits)) return [];
+  const hints = [];
+  const has = (trait) => traits.includes(trait);
+  const addHint = (id, score, sourceTraits, reason) => {
+    if (score <= 0) return;
+    const normalized = normalizeProtoCultureHint({
+      id,
+      score,
+      sourceTraits: sourceTraits.filter((trait) => traits.includes(trait)),
+      sourceArchetype: placeArchetype,
+      reason,
+    });
+    if (normalized) hints.push(normalized);
+  };
+  const remembered = normalizeRememberedHumanIdentity(snapshot?.rememberedHumanIdentity || target?.rememberedHumanIdentity || null);
+  const polityAncestryDepth = Math.max(
+    snapshot?.humanMemory?.polity?.branchDepth || 0,
+    Array.isArray(snapshot?.humanMemory?.polity?.ancestryIds) ? snapshot.humanMemory.polity.ancestryIds.length - 1 : 0,
+    Array.isArray(remembered?.polityAncestryIds) ? remembered.polityAncestryIds.length - 1 : 0
+  );
+  const lineageAncestryDepth = Math.max(
+    snapshot?.humanMemory?.lineage?.branchDepth || 0,
+    Array.isArray(snapshot?.humanMemory?.lineage?.ancestryIds) ? snapshot.humanMemory.lineage.ancestryIds.length - 1 : 0,
+    Array.isArray(remembered?.lineageAncestryIds) ? remembered.lineageAncestryIds.length - 1 : 0
+  );
+
+  addHint(
+    PROTO_CULTURE_HINTS.RIVER_BOUND,
+    (placeArchetype === PLACE_ARCHETYPES.RIVER_VILLAGE ? 0.45 : 0) +
+      (hasAnyTrait(traits, [SEMANTIC_TRAITS.RIVER_ADJACENT, SEMANTIC_TRAITS.RIVER_CENTER, SEMANTIC_TRAITS.RIVER_CROSSING]) ? 0.25 : 0) +
+      (has(SEMANTIC_TRAITS.POLITY_OWNED) ? 0.15 : 0) +
+      (has(SEMANTIC_TRAITS.LINEAGE_CONTINUITY) ? 0.15 : 0) +
+      (placeArchetype === PLACE_ARCHETYPES.SETTLED_VILLAGE ? 0.1 : 0),
+    [SEMANTIC_TRAITS.RIVER_ADJACENT, SEMANTIC_TRAITS.RIVER_CENTER, SEMANTIC_TRAITS.RIVER_CROSSING, SEMANTIC_TRAITS.HUMAN_SETTLED, SEMANTIC_TRAITS.POLITY_OWNED, SEMANTIC_TRAITS.LINEAGE_CONTINUITY],
+    "Human place is settled beside local river signals."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.FOREST_EDGE,
+    (placeArchetype === PLACE_ARCHETYPES.FOREST_EDGE_SETTLEMENT ? 0.45 : 0) +
+      (has(SEMANTIC_TRAITS.GREAT_FOREST_NEARBY) ? 0.25 : 0) +
+      (has(SEMANTIC_TRAITS.BEAST_HABITAT) ? 0.2 : 0) +
+      (has(SEMANTIC_TRAITS.HUMAN_SETTLED) ? 0.1 : 0),
+    [SEMANTIC_TRAITS.GREAT_FOREST_NEARBY, SEMANTIC_TRAITS.BEAST_HABITAT, SEMANTIC_TRAITS.HUMAN_SETTLED],
+    "Human place is shaped by nearby forest or WILD habitat signals."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.MEMORY_BOUND,
+    (hasAnyTrait(traits, [SEMANTIC_TRAITS.HUMAN_OLD_SEAT, SEMANTIC_TRAITS.HUMAN_REMNANT]) ? 0.35 : 0) +
+      (remembered ? 0.3 : 0) +
+      (hasAnyTrait(traits, [SEMANTIC_TRAITS.COLLAPSED_MEMORY, SEMANTIC_TRAITS.INHERITED_MEMORY]) ? 0.2 : 0) +
+      (has(SEMANTIC_TRAITS.LINEAGE_CONTINUITY) ? 0.15 : 0) +
+      ([PLACE_ARCHETYPES.OLD_SEAT, PLACE_ARCHETYPES.HAUNTED_REMNANT].includes(placeArchetype) ? 0.1 : 0),
+    [SEMANTIC_TRAITS.HUMAN_OLD_SEAT, SEMANTIC_TRAITS.HUMAN_REMNANT, SEMANTIC_TRAITS.LINEAGE_CONTINUITY, SEMANTIC_TRAITS.INHERITED_MEMORY, SEMANTIC_TRAITS.COLLAPSED_MEMORY],
+    "Human identity persists through lineage, old seat, or remnant memory."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.SCAR_BOUND,
+    (hasAnyTrait(traits, [SEMANTIC_TRAITS.MARK_CORRODED, SEMANTIC_TRAITS.SPIRIT_SCARRED]) ? 0.35 : 0) +
+      (hasAnyTrait(traits, [SEMANTIC_TRAITS.SPIRIT_PRESSURE, SEMANTIC_TRAITS.ROT_SOURCE_NEARBY]) ? 0.25 : 0) +
+      ([PLACE_ARCHETYPES.HAUNTED_REMNANT, PLACE_ARCHETYPES.PRESSURED_SEAT, PLACE_ARCHETYPES.SPIRIT_SCAR].includes(placeArchetype) ? 0.15 : 0),
+    [SEMANTIC_TRAITS.SPIRIT_PRESSURE, SEMANTIC_TRAITS.SPIRIT_SCARRED, SEMANTIC_TRAITS.MARK_CORRODED, SEMANTIC_TRAITS.ROT_SOURCE_NEARBY],
+    "Human place is repeatedly observed with Spirit, MARK, or rot pressure."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.FRONTIER_ADAPTED,
+    (has(SEMANTIC_TRAITS.HUMAN_OUTPOST) ? 0.35 : 0) +
+      (placeArchetype === PLACE_ARCHETYPES.FRONTIER_OUTPOST ? 0.25 : 0) +
+      (hasAnyTrait(traits, [SEMANTIC_TRAITS.MIXED_PRESSURE, SEMANTIC_TRAITS.BEAST_PRESSURE, SEMANTIC_TRAITS.SPIRIT_PRESSURE, SEMANTIC_TRAITS.PRESSURED_POLITY]) ? 0.2 : 0),
+    [SEMANTIC_TRAITS.HUMAN_OUTPOST, SEMANTIC_TRAITS.MIXED_PRESSURE, SEMANTIC_TRAITS.BEAST_PRESSURE, SEMANTIC_TRAITS.SPIRIT_PRESSURE, SEMANTIC_TRAITS.PRESSURED_POLITY],
+    "Human place is repeatedly observed at a pressure frontier."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.MONUMENT_CENTERED,
+    (has(SEMANTIC_TRAITS.MONUMENT_SHADOWED) ? 0.35 : 0) +
+      (hasAnyTrait(traits, [SEMANTIC_TRAITS.HUMAN_SETTLED, SEMANTIC_TRAITS.HUMAN_SEAT, SEMANTIC_TRAITS.LINEAGE_CONTINUITY, SEMANTIC_TRAITS.POLITY_OWNED]) ? 0.3 : 0),
+    [SEMANTIC_TRAITS.MONUMENT_SHADOWED, SEMANTIC_TRAITS.HUMAN_SETTLED, SEMANTIC_TRAITS.HUMAN_SEAT, SEMANTIC_TRAITS.LINEAGE_CONTINUITY, SEMANTIC_TRAITS.POLITY_OWNED],
+    "Human place is observed with monument memory context."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.SPRING_REFUGE,
+    (placeArchetype === PLACE_ARCHETYPES.FERTILE_REFUGE ? 0.35 : 0) +
+      (has(SEMANTIC_TRAITS.SPRING_FED) ? 0.3 : 0) +
+      (has(SEMANTIC_TRAITS.FERTILITY_RECOVERING) ? 0.25 : 0),
+    [SEMANTIC_TRAITS.SPRING_FED, SEMANTIC_TRAITS.FERTILITY_RECOVERING],
+    "Human place is observed near fertility recovery or spring support."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.SPLIT_LINEAGE,
+    (has(SEMANTIC_TRAITS.SPLIT_POLITY) ? 0.35 : 0) +
+      (has(SEMANTIC_TRAITS.LINEAGE_CONTINUITY) ? 0.15 : 0) +
+      (polityAncestryDepth > 1 ? 0.2 : polityAncestryDepth > 0 ? 0.1 : 0) +
+      (lineageAncestryDepth > 1 ? 0.2 : lineageAncestryDepth > 0 ? 0.1 : 0) +
+      (remembered && (remembered.polityId || remembered.lineageId) ? 0.15 : 0),
+    [SEMANTIC_TRAITS.SPLIT_POLITY, SEMANTIC_TRAITS.LINEAGE_CONTINUITY, SEMANTIC_TRAITS.INHERITED_MEMORY],
+    "Human identity shows split or inherited polity/lineage signals."
+  );
+  addHint(
+    PROTO_CULTURE_HINTS.SEATLESS_DRIFT,
+    (has(SEMANTIC_TRAITS.SEATLESS_POLITY) ? 0.35 : 0) +
+      (has(SEMANTIC_TRAITS.HUMAN_OLD_SEAT) ? 0.25 : 0) +
+      (has(SEMANTIC_TRAITS.RECENTLY_ABANDONED) ? 0.2 : 0) +
+      ([PLACE_ARCHETYPES.SEATLESS_POLITY_CENTER, PLACE_ARCHETYPES.OLD_SEAT].includes(placeArchetype) ? 0.15 : 0),
+    [SEMANTIC_TRAITS.SEATLESS_POLITY, SEMANTIC_TRAITS.HUMAN_OLD_SEAT, SEMANTIC_TRAITS.RECENTLY_ABANDONED],
+    "Human identity is observed without a stable current seat."
+  );
+
+  return hints
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .slice(0, 9);
+}
+
+function summarizeProtoCultureMemory(memory) {
+  if (!memory?.signals || typeof memory.signals !== "object") return null;
+  const entries = Object.entries(memory.signals)
+    .filter(([id, signal]) => Object.values(PROTO_CULTURE_HINTS).includes(id) && signal && (signal.score || 0) >= 0.15)
+    .map(([id, signal]) => [id, {
+      score: Number(Math.min(1, Math.max(0, signal.score || 0)).toFixed(2)),
+      samples: Math.max(0, Math.floor(signal.samples || 0)),
+      firstSeenTick: signal.firstSeenTick ?? null,
+      lastSeenTick: signal.lastSeenTick ?? null,
+      sourceTraits: compactProtoCultureSourceTraits(signal.sourceTraits || []),
+    }])
+    .sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0]))
+    .slice(0, 8);
+  const signals = Object.fromEntries(entries);
+  const activeHints = entries.filter(([, signal]) => signal.score >= 0.35).map(([id]) => id);
+  const stableHints = entries.filter(([, signal]) => signal.score >= 0.65 && signal.samples >= 2).map(([id]) => id);
+  const primaryHint = stableHints[0] || activeHints[0] || null;
+  if (!entries.length && !primaryHint) return null;
+  return {
+    version: PROTO_CULTURE_MEMORY_VERSION,
+    primaryHint,
+    stableHints,
+    activeHints,
+    signals,
+  };
+}
+
+function updateProtoCultureMemory(memory, protoCultureHints = [], currentTick = tick) {
+  const nextSignals = {};
+  if (memory?.signals && typeof memory.signals === "object") {
+    for (const [id, signal] of Object.entries(memory.signals)) {
+      if (!Object.values(PROTO_CULTURE_HINTS).includes(id)) continue;
+      const decayedScore = Number(Math.min(1, Math.max(0, (signal?.score || 0) * 0.85)).toFixed(2));
+      if (decayedScore < 0.15) continue;
+      nextSignals[id] = {
+        score: decayedScore,
+        samples: Math.max(0, Math.floor(signal?.samples || 0)),
+        firstSeenTick: signal?.firstSeenTick ?? null,
+        lastSeenTick: signal?.lastSeenTick ?? null,
+        sourceTraits: compactProtoCultureSourceTraits(signal?.sourceTraits || []),
+      };
+    }
+  }
+  for (const hint of protoCultureHints || []) {
+    const normalized = normalizeProtoCultureHint(hint);
+    if (!normalized) continue;
+    const existing = nextSignals[normalized.id] || {
+      score: 0,
+      samples: 0,
+      firstSeenTick: currentTick,
+      lastSeenTick: null,
+      sourceTraits: [],
+    };
+    nextSignals[normalized.id] = {
+      score: Number(Math.min(1, Math.max(0, existing.score + normalized.score * 0.35)).toFixed(2)),
+      samples: existing.samples + 1,
+      firstSeenTick: existing.firstSeenTick ?? currentTick,
+      lastSeenTick: currentTick,
+      sourceTraits: compactProtoCultureSourceTraits([...(existing.sourceTraits || []), ...normalized.sourceTraits]),
+    };
+  }
+  return summarizeProtoCultureMemory({
+    version: PROTO_CULTURE_MEMORY_VERSION,
+    signals: nextSignals,
+  });
+}
+
 function snapshotPlace(anchorOrTarget = {}, source = world, radius = 2) {
   const x = Math.round(anchorOrTarget.x ?? anchorOrTarget.position?.x ?? 0);
   const y = Math.round(anchorOrTarget.y ?? anchorOrTarget.position?.y ?? 0);
@@ -7990,6 +8226,7 @@ function snapshotPlace(anchorOrTarget = {}, source = world, radius = 2) {
   snapshot.semanticTraits = deriveSemanticTraits(snapshot, anchorOrTarget);
   snapshot.placeArchetype = derivePlaceArchetype(snapshot, snapshot.semanticTraits, anchorOrTarget);
   snapshot.interpretationHints = derivePlaceInterpretationHints(snapshot, snapshot.semanticTraits, snapshot.placeArchetype);
+  snapshot.protoCultureHints = deriveProtoCultureHints(snapshot, snapshot.semanticTraits, snapshot.placeArchetype, anchorOrTarget);
   return snapshot;
 }
 
@@ -8103,6 +8340,10 @@ function computePlaceChange(anchor, previousSnapshot, currentSnapshot) {
   pushSemanticTrait(contextTraits, visibleToPlayer ? SEMANTIC_TRAITS.RECENTLY_CHANGED : SEMANTIC_TRAITS.LONG_STABLE);
   const contextArchetype = derivePlaceArchetype(currentSnapshot, contextTraits, anchor);
   const contextHints = derivePlaceInterpretationHints(currentSnapshot, contextTraits, contextArchetype);
+  const protoCultureHints = Array.isArray(currentSnapshot.protoCultureHints)
+    ? currentSnapshot.protoCultureHints.slice()
+    : deriveProtoCultureHints(currentSnapshot, currentSnapshot.semanticTraits || contextTraits, currentSnapshot.placeArchetype || contextArchetype, anchor);
+  const protoCultureMemory = summarizeProtoCultureMemory(anchor?.protoCultureMemory || null);
   const normalizedCategory = PLACE_CHANGE_CATEGORIES.has(category) ? category : "no_significant_change";
   const normalizedSubject = PLACE_CHANGE_SUBJECTS.has(subject) ? subject : "mixed";
   const normalizedDirection = PLACE_CHANGE_DIRECTIONS.has(direction) ? direction : "none";
@@ -8132,6 +8373,8 @@ function computePlaceChange(anchor, previousSnapshot, currentSnapshot) {
       placeArchetype: contextArchetype,
       semanticTraits: contextTraits.slice(0, 12),
       interpretationHints: contextHints,
+      protoCultureHints,
+      protoCultureMemory,
       visibleToPlayer,
     },
   };
@@ -8158,6 +8401,7 @@ function inspectPlaceTarget(target, source = world) {
       changeSinceLastInspect: null,
       changeSinceLastSleep: null,
       rememberedHumanIdentity: null,
+      protoCultureMemory: null,
     };
     placeMemory.anchors.push(anchor);
   }
@@ -8166,7 +8410,9 @@ function inspectPlaceTarget(target, source = world) {
   updateRememberedHumanIdentity(anchor, anchor.currentSnapshot);
   if (anchor.rememberedHumanIdentity && !anchor.currentSnapshot.rememberedHumanIdentity) {
     anchor.currentSnapshot.rememberedHumanIdentity = JSON.parse(JSON.stringify(anchor.rememberedHumanIdentity));
+    anchor.currentSnapshot.protoCultureHints = deriveProtoCultureHints(anchor.currentSnapshot, anchor.currentSnapshot.semanticTraits, anchor.currentSnapshot.placeArchetype, anchor);
   }
+  anchor.protoCultureMemory = updateProtoCultureMemory(anchor.protoCultureMemory, anchor.currentSnapshot.protoCultureHints || [], tick);
   anchor.lastInspectedAtTick = tick;
   if (anchor.previousSnapshot) anchor.changeSinceLastInspect = computePlaceChange(anchor, anchor.previousSnapshot, anchor.currentSnapshot);
   if (!placeMemory.awakeCycleInspectedAnchorIds.includes(anchor.id)) placeMemory.awakeCycleInspectedAnchorIds.push(anchor.id);
@@ -10258,6 +10504,7 @@ window.__triSpeciesSim = {
   POI_EFFECTS,
   SEMANTIC_TRAITS,
   PLACE_ARCHETYPES,
+  PROTO_CULTURE_HINTS,
   EXPLORE_CONFIG: {
     cols: EXPLORE_VIEWPORT_COLS,
     rows: EXPLORE_VIEWPORT_ROWS,
@@ -10375,6 +10622,12 @@ window.__triSpeciesSim = {
   },
   derivePlaceInterpretationHintsForTest(snapshot, semanticTraits = [], placeArchetype = PLACE_ARCHETYPES.ORDINARY_PLACE) {
     return JSON.parse(JSON.stringify(derivePlaceInterpretationHints(snapshot, semanticTraits, placeArchetype)));
+  },
+  deriveProtoCultureHintsForTest(snapshot, semanticTraits = snapshot?.semanticTraits || [], placeArchetype = snapshot?.placeArchetype || PLACE_ARCHETYPES.ORDINARY_PLACE, target = null) {
+    return JSON.parse(JSON.stringify(deriveProtoCultureHints(snapshot, semanticTraits, placeArchetype, target)));
+  },
+  updateProtoCultureMemoryForTest(memory, protoCultureHints = [], currentTick = tick) {
+    return JSON.parse(JSON.stringify(updateProtoCultureMemory(memory, protoCultureHints, currentTick)));
   },
   getLastWakeReportForTest() {
     const report = placeMemory.wakeReports[placeMemory.wakeReports.length - 1] || null;

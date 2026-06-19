@@ -4765,12 +4765,69 @@ settled_village is a memory label, not a building or resource economy.
 
 ---
 
+## 72.2 V0.14B Observer-Only Proto-Culture Hints
+
+V0.14B adds observer-only proto-culture hints to Place Memory for inspected Human-related places.
+
+It does not change Human, Beast, or Spirit movement, lifecycle, conflict, conversion, reproduction, terrain rewriting, fertility balance, POI ecology effects, river blocker behavior, terrain decay, grid size, terrain types, unit types, Explore movement, tick order, or map seed behavior.
+
+Scope:
+
+```text
+PlaceSnapshot may include protoCultureHints.
+PlaceMemoryAnchor may include protoCultureMemory.
+protoCultureHints are deterministic interpretation signals.
+protoCultureMemory updates only through inspection and sleep/wake place observation.
+Wake reports remain sparse and do not show entries solely because protoCultureMemory changed.
+```
+
+Human-related place gate:
+
+```text
+Only Human-related snapshots may produce protoCultureHints.
+Human-related means semanticTraits include Human settlement/seat/outpost/remnant/domain/ownership/lineage signals, or the snapshot has humanMemory or rememberedHumanIdentity.
+Ordinary Springs, Great Forests, Beast ranges, Rivers, Rot Sources, and Spirit scars do not produce protoCultureHints unless Human memory or identity is present.
+```
+
+Allowed hint ids:
+
+```text
+river_bound
+forest_edge
+memory_bound
+scar_bound
+frontier_adapted
+monument_centered
+spring_refuge
+split_lineage
+seatless_drift
+```
+
+Observer-only limits:
+
+```text
+Proto-culture hints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, tarot mechanics, or gameplay rules.
+Proto-culture hints must not feed back into semanticTraits, placeArchetype, Human lineage, Human polity, ownership detection, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
+RememberedHumanIdentity may contribute to memory_bound or split_lineage, but it must not create current polity ownership.
+```
+
+Known simplifications:
+
+```text
+Scoring is compact and deterministic.
+sourceTraits and protoCultureMemory signals are capped for export size.
+primaryHint is selected from stable hints first, then active hints, then null.
+V0.14B prepares future observer interpretation only; it does not implement civilization modules.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
-Date: 2026-06-18
-Status: V0.14A.1 Semantic Place Tuning implemented
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
+Date: 2026-06-19
+Status: V0.14B Observer-Only Proto-Culture Hints implemented
 ```
 
 Current version split:
@@ -4824,6 +4881,7 @@ Map seed editor usability: TRI_SPECIES_WORLD_SIM_V0.13.1.1_MAP_SEED_EDITOR_USABI
 Place memory semantics / river village guard: TRI_SPECIES_WORLD_SIM_V0.13.1.2_PLACE_MEMORY_SEMANTICS_RIVER_VILLAGE_GUARD
 Semantic place layer: TRI_SPECIES_WORLD_SIM_V0.14A_SEMANTIC_PLACE_LAYER
 Semantic place tuning: TRI_SPECIES_WORLD_SIM_V0.14A.1_SEMANTIC_PLACE_TUNING
+Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
 ```
 
 V0.8.3 notes:

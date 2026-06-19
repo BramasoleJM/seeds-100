@@ -151,6 +151,7 @@ Mutates simulation: no.
 Observer-only: yes.
 Export shape: id, type, displayName, position, sourceRef, inspected ticks, snapshots, changes.
 V0.14A.1 optional field: `rememberedHumanIdentity` stores compact last-known Human polity / lineage identity without claiming current ownership.
+V0.14B optional field: `protoCultureMemory` stores compact observer-only accumulated hint signals. It does not change simulation, Human identity, or player-visible wake report rules.
 Future notes: sourceRef should stay compact and deterministic.
 
 ## PlaceSnapshot
@@ -161,6 +162,7 @@ Read by: `computePlaceChange`, exports, tests.
 Mutates simulation: no.
 Observer-only: yes.
 Export shape: tick, position, center, terrain/unit/fertility/ecology summaries, placeState, optional humanMemory, optional V0.14A.1 `rememberedHumanIdentity`, V0.14A `semanticTraits`, `placeArchetype`, `interpretationHints`.
+V0.14B field: `protoCultureHints`, derived from semanticTraits, placeArchetype, humanMemory, and rememberedHumanIdentity. Non-Human-related places export an empty array.
 Future notes: do not add large raw cell arrays.
 
 ## PlaceChange
@@ -171,6 +173,7 @@ Read by: info panel, wake reports, exports.
 Mutates simulation: no.
 Observer-only: yes.
 Export shape: category, subject, direction, intensity, ticks, metricsDelta, playerText, llmContext.
+V0.14B note: `llmContext` may include `protoCultureHints` and `protoCultureMemory` for observer/export consumers.
 Future notes: no-significant-change remains quiet to the player.
 
 ## PlayerObserver

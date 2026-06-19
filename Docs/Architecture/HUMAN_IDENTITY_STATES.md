@@ -60,3 +60,9 @@ Outpost-source seats must be backed by a valid owned outpost.
 Place Memory snapshots read Human identity into `humanMemory`.
 Semantic traits derive `human_settled`, `human_seat`, `human_old_seat`, `human_outpost`, `human_remnant`, `human_domain`, `polity_owned`, `lineage_continuity`, `split_polity`, `seatless_polity`, and `pressured_polity`.
 These traits do not feed back into Human identity detection.
+
+## V0.14B Relation
+
+Proto-culture hints may read Human identity snapshots as observer-only interpretation input.
+
+They must not affect lineage, polity, village, outpost, seat, old seat, remnant, or ownership detection. Remembered Human identity may contribute to memory-oriented hints, but it must not create current ownership.
