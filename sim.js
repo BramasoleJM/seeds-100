@@ -4426,6 +4426,59 @@ function applyActiveMapSeedLive({ preservePlayer = true, shouldRender = true } =
   return next;
 }
 
+function invalidateMapSeedLiveDisplay({ shouldRender = true } = {}) {
+  macroDisplayMaskCache = { source: null, macroTick: null, populationSerial: null, memorySerial: null, lineageSerial: null, politySerial: null, lineageVisible: null, mode: null, masks: null };
+  macroDisplayWorld = null;
+  refreshMapSeedTextarea();
+  if (shouldRender) {
+    analyzeMacroWorldNow();
+    refreshMacroDisplayFrame({ force: true, mode: viewModeSelect?.value === "explore" ? "macro" : viewModeSelect?.value || "macro" });
+    renderWorld();
+    updateStats();
+  }
+}
+
+function refreshInitialWorldFromActiveMapSeed() {
+  const seededInitial = applyMapSeedToWorld(activeMapSeed || createDefaultMapSeed(), { setAsCurrent: false });
+  currentInitialWorld = cloneWorld(seededInitial, { includeMetadata: true });
+  currentInitialWorld.mapSeed = normalizeMapSeed(activeMapSeed || createDefaultMapSeed());
+  currentInitialWorld.mapFeatures = cloneMapFeatures(mapFeatures);
+  currentInitialWorld.pointsOfInterest = clonePOIs(worldPOIs);
+}
+
+function clearLiveSeedCellForBrush(x, y, brush) {
+  if (!inBounds(x, y)) return;
+  const cell = world[y][x];
+  cell.unit = null;
+  cell.age = 0;
+  cell.role = "normal";
+  cell.maxAge = null;
+  if (cell.terrain === TERRAIN.BLOCK && brush !== "mountain") {
+    cell.terrain = TERRAIN.EMPTY;
+    cell.terrainAge = 0;
+    cell.fertility = Math.max(cell.fertility || 0, 2);
+  }
+}
+
+function applyMapSeedBrushToCurrentWorld(x, y, brush) {
+  if (!inBounds(x, y)) return;
+  clearLiveSeedCellForBrush(x, y, brush);
+  const cell = world[y][x];
+  if (brush === "mountain") {
+    world[y][x] = createCell(TERRAIN.BLOCK, null, 0, "normal", 0);
+  } else if (brush === UNIT.HUMAN) {
+    world[y][x] = createCell(TERRAIN.FIELD, UNIT.HUMAN, 0, "normal", 2);
+  } else if (brush === UNIT.BEAST) {
+    world[y][x] = createCell(TERRAIN.WILD, UNIT.BEAST, 0, "pack", 3);
+  } else if (brush === UNIT.SPIRIT) {
+    world[y][x] = createCell(TERRAIN.MARK, UNIT.SPIRIT, 0, "manifestation", 2);
+  }
+  world.mapSeed = normalizeMapSeed(activeMapSeed || createDefaultMapSeed());
+  world.mapFeatures = cloneMapFeatures(mapFeatures);
+  world.pointsOfInterest = clonePOIs(worldPOIs);
+  preservePlayerAfterMapSeedApply(playerObserver ? JSON.parse(JSON.stringify(playerObserver)) : null);
+}
+
 function terrainClass(terrain) {
   return {
     ".": "terrain-empty",
@@ -10548,7 +10601,9 @@ function applyMapSeedBrush(x, y, brush = mapSeedBrushSelect?.value || "") {
   removeSeedEntriesAt(seed, x, y);
   if (brush === "erase") {
     activeMapSeed = normalizeMapSeed(seed);
-    applyActiveMapSeedLive();
+    refreshInitialWorldFromActiveMapSeed();
+    applyMapSeedBrushToCurrentWorld(x, y, brush);
+    invalidateMapSeedLiveDisplay();
     showStatus(`Erased seed item at ${x},${y}.`);
     return { painted: true, x, y, brush };
   }
@@ -10558,7 +10613,9 @@ function applyMapSeedBrush(x, y, brush = mapSeedBrushSelect?.value || "") {
   else if (Object.values(POI_TYPES).includes(brush)) seed.pois.push({ id: `seed_${brush}_${x}_${y}`, type: brush, x, y });
   else return false;
   activeMapSeed = normalizeMapSeed(seed);
-  applyActiveMapSeedLive();
+  refreshInitialWorldFromActiveMapSeed();
+  applyMapSeedBrushToCurrentWorld(x, y, brush);
+  invalidateMapSeedLiveDisplay();
   showStatus(`Painted ${brushDisplayName(brush)} at ${x},${y}.`);
   return { painted: true, x, y, brush };
 }

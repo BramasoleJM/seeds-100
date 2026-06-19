@@ -26,7 +26,7 @@ units, mountains, rivers, POIs
 
 Mountains become `#` BLOCK terrain. Rivers are `mapFeatures`, not terrain and not units. River cells block H/B/S movement and Explore movement through the existing blocker checks, render as water, and weakly restore nearby fertility up to level 3.
 
-Map Seed Editor paints live: clicking or drag-painting Mountain, River, Human, Beast, Spirit, or Erase immediately updates the current world and synced seed JSON. POI brushes place on click. Generate Random Preset creates an editable seed with mountains, a river, POIs, and small H/B/S starts. Clear Seed returns to an empty editable seed.
+Map Seed Editor paints live: clicking or drag-painting Mountain, River, Human, Beast, Spirit, or Erase immediately updates the current world and synced seed JSON. Live painting is additive over the current running world and only changes the painted cell plus river / POI feature lists; use Reset From Seed when you want to rebuild the world from the seed. POI brushes place on click. Generate Random Preset creates an editable seed with mountains, a river, POIs, and small H/B/S starts. Clear Seed returns to an empty editable seed.
 
 Generated/random worlds also create river map features. Rivers remain `mapFeatures.rivers`, not terrain, and generated river paths avoid BLOCK/mountains where practical.
 

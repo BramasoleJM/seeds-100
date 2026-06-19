@@ -4575,8 +4575,9 @@ Apply JSON Seed remains available for applying the textarea seed JSON.
 Known simplification:
 
 ```text
-Live painting rebuilds the 40 x 25 world from the active seed after each brush edit.
-This is acceptable for the current single-screen prototype and keeps behavior simple.
+Live painting is an incremental overlay on the current 40 x 25 world.
+Brush edits update only the painted cell plus active river / POI feature lists, then sync the active seed JSON.
+Reset From Seed and Apply JSON Seed are the explicit actions that rebuild the world from the full seed.
 ```
 
 ---

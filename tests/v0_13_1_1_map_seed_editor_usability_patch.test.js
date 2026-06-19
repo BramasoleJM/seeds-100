@@ -157,6 +157,15 @@ seed = sim.getActiveMapSeedForTest();
 assert.equal(painted, 3, "drag paint should skip duplicate same-cell writes");
 assert.equal(seed.rivers.length, 3, "drag paint should apply multiple cells");
 
+const evolvedWorld = sim.getWorldForTest();
+evolvedWorld[18][18] = sim.createCell(sim.TERRAIN.WILD, sim.UNIT.BEAST, 12, "pack", 4);
+sim.resetWorld(evolvedWorld);
+sim.paintMapSeedBrushForTest(4, 4, "mountain");
+world = sim.getWorldForTest();
+assert.equal(world[18][18].terrain, sim.TERRAIN.WILD, "live seed painting should preserve current evolved terrain away from the painted cell");
+assert.equal(world[18][18].unit, sim.UNIT.BEAST, "live seed painting should preserve current evolved units away from the painted cell");
+assert.equal(world[4][4].terrain, sim.TERRAIN.BLOCK, "live seed painting should still update the painted cell immediately");
+
 const randomSeed = sim.generateRandomMapSeedPresetForTest();
 assert.ok(randomSeed.rivers.length > 0, "random preset should include a river");
 assert.ok(randomSeed.mountains.length > 0, "random preset should include mountains");
