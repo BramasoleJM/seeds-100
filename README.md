@@ -12,7 +12,7 @@ The current stability build uses a `40 x 25` grid and clamps Play speed to at le
 
 ## What this prototype tests
 
-The demo tests whether three visible unit types can create readable dynamics through movement, fertility, terrain rewriting, lifecycle, group behavior, conflict, conversion, reproduction, and terrain decay on one grid. V0.9 also adds an observer-only Macro World Layer that interprets the grid as places, routes, events, and map icons. V0.10.7.1 makes Macro View read primarily as population evolution shapes. V0.10.9.1 keeps the observer-only slow memory trace layer selective. V0.11 adds a Human Lineage overlay that tracks whether current Human settlement shapes continue or descend from older Human settlement shapes. V0.11.1 makes that layer visible from the main controls and adds a compact status readout. V0.11.2 replaces old debug icons with sparse Semantic Tags anchored to population shapes, lineage memory, and POIs. V0.11.3 separates Human domain from stable Human seat anchors. V0.11.4 declutters Semantic Tags so the map shows only the most useful labels by default. V0.11.5 adds conservative Human outposts so far Human domains appear as `H outpost` before they can become `H seat`. V0.11.6 groups Human seats, outposts, and villages into observer-only Human polities. V0.11.7 gives Human polity tags stable color accents and detailed hover identity. V0.11.8 makes visible semantic tags clickable and opens a compact info panel. V0.13.1 adds editable map seeds, river map features, inspected-place memory, and an Explore sleep wake report. V0.13.1.2 makes place memory structured, suppresses unchanged player text, and prevents current Human village anchors from occupying river cells. V0.14A adds observer-only semantic traits, place archetypes, and interpretation hints to Place Memory snapshots and change context. V0.14A.1 tightens `contested_poi`, adds `settled_village`, and lets inspected Human places retain compact remembered identity without claiming current ownership. V0.14B adds observer-only `protoCultureHints` and anchor-level `protoCultureMemory` for inspected Human-related places. V0.14B.1 adds an export-only `protoCultureSummary` for audit readability. V0.14B.2 improves Explore blocker readability, adds generated-world river map features, adds a lightweight proto-culture summary export button, and adds a compact multi-seed proto-culture audit helper. V0.14C adds export-derived `humanCultureCandidateSummary`, which rolls Human place-memory evidence up to compact Human polity / lineage candidate signals for review. V0.14C.1 adds owner lifecycle, candidate use, dominance, and maturity audit fields to those summaries.
+The demo tests whether three visible unit types can create readable dynamics through movement, fertility, terrain rewriting, lifecycle, group behavior, conflict, conversion, reproduction, and terrain decay on one grid. V0.9 also adds an observer-only Macro World Layer that interprets the grid as places, routes, events, and map icons. V0.10.7.1 makes Macro View read primarily as population evolution shapes. V0.10.9.1 keeps the observer-only slow memory trace layer selective. V0.11 adds a Human Lineage overlay that tracks whether current Human settlement shapes continue or descend from older Human settlement shapes. V0.11.1 makes that layer visible from the main controls and adds a compact status readout. V0.11.2 replaces old debug icons with sparse Semantic Tags anchored to population shapes, lineage memory, and POIs. V0.11.3 separates Human domain from stable Human seat anchors. V0.11.4 declutters Semantic Tags so the map shows only the most useful labels by default. V0.11.5 adds conservative Human outposts so far Human domains appear as `H outpost` before they can become `H seat`. V0.11.6 groups Human seats, outposts, and villages into observer-only Human polities. V0.11.7 gives Human polity tags stable color accents and detailed hover identity. V0.11.8 makes visible semantic tags clickable and opens a compact info panel. V0.13.1 adds editable map seeds, river map features, inspected-place memory, and an Explore sleep wake report. V0.13.1.2 makes place memory structured, suppresses unchanged player text, and prevents current Human village anchors from occupying river cells. V0.14A adds observer-only semantic traits, place archetypes, and interpretation hints to Place Memory snapshots and change context. V0.14A.1 tightens `contested_poi`, adds `settled_village`, and lets inspected Human places retain compact remembered identity without claiming current ownership. V0.14B adds observer-only `protoCultureHints` and anchor-level `protoCultureMemory` for inspected Human-related places. V0.14B.1 adds an export-only `protoCultureSummary` for audit readability. V0.14B.2 improves Explore blocker readability, adds generated-world river map features, adds a lightweight proto-culture summary export button, and adds a compact multi-seed proto-culture audit helper. V0.14C adds export-derived `humanCultureCandidateSummary`, which rolls Human place-memory evidence up to compact Human polity / lineage candidate signals for review. V0.14C.1 adds owner lifecycle, candidate use, dominance, and maturity audit fields to those summaries. V0.15 adds observer-only civilization candidate maturity gates for `ready`, `ripe`, `volatile_ripe`, `legacy_seed`, `blocked`, and `not_ready`.
 
 This version does not implement a Zelda-style multi-screen map, tarot mechanics, story systems, resources, villages, NPCs, quests, or save/load.
 
@@ -74,6 +74,16 @@ This is observer-only audit/readability data.
 It does not unlock civilizations or change simulation behavior.
 
 Known simplification: owners with missing or unexpected lifecycle state export `ownerLifecycleClass: "unknown"` and use the deterministic `active_candidate` fallback. This is an audit compatibility label only, not a civilization readiness claim.
+
+## V0.15 Civilization Candidate Maturity Gates
+
+Human culture candidate summaries now include observer-only `maturityStage`, `maturityScore`, `readiness`, `maturityReasons`, and `maturityBlockers` on candidate signals, plus owner-level `maturedCandidate`, `readyCandidates`, `ripeCandidates`, `volatileRipeCandidates`, `legacySeedCandidates`, `blockedCandidates`, `notReadyCandidates`, and `maturitySummary`.
+
+The maturity stages are `not_ready`, `ready`, `ripe`, `volatile_ripe`, `legacy_seed`, and `blocked`.
+
+This is export/audit data only. It does not unlock civilizations, add civilization gameplay, change Human identity ownership, or change H/B/S movement, tick order, lifecycle, terrain, fertility, POI effects, river blockers, Explore movement, proto-culture scoring, proto-culture memory updates, or wake report sparsity.
+
+Known simplification: thresholds are deterministic and compact. Strong active dominant candidates can become `ripe`; strong at-risk directions become `volatile_ripe`; strong legacy directions become `legacy_seed`; ambiguous owners are downgraded and never become stable `ripe`.
 
 ## Units
 
@@ -150,7 +160,7 @@ Lifecycle death, fertility-driven Human decline and migration, isolation death, 
 ## Rules version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+Rules version: TRI_SPECIES_WORLD_SIM_V0.15_CIVILIZATION_CANDIDATE_MATURITY_GATES
 ```
 
 Current version split:
@@ -209,6 +219,7 @@ Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_RE
 Explore / river / proto-culture audit usability: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
 Human culture candidate rollup: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
 Human culture candidate maturity / dominance audit: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+Civilization candidate maturity gates: TRI_SPECIES_WORLD_SIM_V0.15_CIVILIZATION_CANDIDATE_MATURITY_GATES
 ```
 
 V0.14A Semantic Place Layer:

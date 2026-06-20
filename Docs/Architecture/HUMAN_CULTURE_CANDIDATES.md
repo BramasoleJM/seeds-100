@@ -1,6 +1,6 @@
 # Human Culture Candidates
 
-V0.14C adds observer-only Human culture candidate summaries. V0.14C.1 adds maturity and dominance audit fields.
+V0.14C adds observer-only Human culture candidate summaries. V0.14C.1 adds maturity and dominance audit fields. V0.15 adds observer-only civilization candidate maturity gates.
 
 This is not a civilization module. It does not add civilization gameplay, unlocks, factions, AI, resources, buildings, NPCs, quests, story events, myth events, tarot mechanics, terrain, units, save/load, network calls, or a multi-screen map.
 
@@ -31,7 +31,7 @@ emerging
 candidate
 ```
 
-There is no ripe, unlocked, active civilization, or gameplay effect status.
+These candidate statuses are still separate from V0.15 maturity stages. There is no unlocked, active civilization, or gameplay effect status.
 
 ## Export Shape
 
@@ -40,6 +40,7 @@ Exports may include:
 ```js
 humanCultureCandidateSummary: {
   version: "0.14C",
+  civilizationMaturityVersion: "0.15",
   totalPolities: 0,
   totalLineages: 0,
   politiesWithCandidates: 0,
@@ -51,6 +52,17 @@ humanCultureCandidateSummary: {
   ownerLifecycleCounts: {},
   ambiguousOwnerCount: 0,
   highScoreEmergingCount: 0,
+  maturityStageCounts: {},
+  readinessCounts: {},
+  maturityByCandidateType: {},
+  readyCandidateTypeCounts: {},
+  ripeCandidateTypeCounts: {},
+  volatileRipeCandidateTypeCounts: {},
+  legacySeedCandidateTypeCounts: {},
+  blockedCandidateTypeCounts: {},
+  notReadyCandidateTypeCounts: {},
+  ownerLifecycleMaturityCounts: {},
+  ambiguousMaturityCounts: {},
   byPolity: [],
   byLineage: [],
   contextOnlySignals: []
@@ -59,7 +71,7 @@ humanCultureCandidateSummary: {
 
 The summary is derived at export / review time. It is not live mutable simulation state and must not feed back into proto-culture scoring, Human identity, ecology, movement, terrain, fertility, POI behavior, river blockers, Explore movement, tick order, or wake report visibility.
 
-V0.14C.1 owner records include:
+V0.14C.1 / V0.15 owner records include:
 
 ```text
 ownerLifecycleClass
@@ -68,9 +80,17 @@ secondaryCandidates
 candidateDominance
 topCandidates
 candidateSignals
+maturedCandidate
+readyCandidates
+ripeCandidates
+volatileRipeCandidates
+legacySeedCandidates
+blockedCandidates
+notReadyCandidates
+maturitySummary
 ```
 
-V0.14C.1 candidate signals include:
+V0.14C.1 / V0.15 candidate signals include:
 
 ```text
 candidateUse
@@ -78,6 +98,11 @@ ownerLifecycleClass
 dominanceScore
 evidenceSummary
 maturityReason
+maturityStage
+maturityScore
+readiness
+maturityReasons
+maturityBlockers
 ```
 
 ## Candidate Types
@@ -251,6 +276,37 @@ Emerging: not enough stable Human subject evidence is resolved.
 
 This explains why a high score can still be `emerging`.
 
+## V0.15 Maturity Gates
+
+Each candidate signal includes a compact V0.15 maturity gate:
+
+```text
+not_ready
+ready
+ripe
+volatile_ripe
+legacy_seed
+blocked
+```
+
+`maturityStage` answers whether a candidate is merely present, ready for future systems to read, ripe enough to be a strong future target, unstable but mature, legacy-only, or blocked.
+
+`maturityScore` is a deterministic 0..1 score derived from existing candidate score, dominance score, stable Human subject evidence, active Human subject evidence, unique Human subject anchors, accumulated subject samples, dominant status, and clear dominance.
+
+Ready requires a dominant `candidate` signal with at least one stable Human subject anchor, at least two unique Human subject anchors, and `maturityScore >= 0.68`.
+
+Ripe is stricter: active or unknown lifecycle, non-ambiguous dominance margin at least `0.08`, strong Human subject evidence, base candidate `score >= 0.94`, and `maturityScore >= 0.86`.
+
+At-risk owners with strong mature direction export `volatile_ripe` instead of stable `ripe`.
+
+Legacy owners with strong mature direction export `legacy_seed` instead of active `ready` or `ripe`.
+
+Ambiguous owners may be `ready` or `blocked`, but do not become stable `ripe`.
+
+Secondary candidates default to `not_ready`; this keeps one owner from appearing to mature in every plausible direction at once.
+
+Context-only evidence cannot mature. POIs, scars, rivers, Springs, Great Forests, Rot Sources, forests, and Beast ranges may support context evidence, but cannot own `ready`, `ripe`, `volatile_ripe`, or `legacy_seed`.
+
 ## Active vs Legacy Interpretation
 
 `active_candidate` and `at_risk_candidate` describe living or pressured owner contexts.
@@ -269,16 +325,18 @@ current tick place review placeMemory
 multi-seed proto-culture audit runs and aggregate candidate totals
 ```
 
-The object stays compact: owner summaries, candidate signals, evidence anchor ids, aggregate counts, dominance counts, maturity counts, and context-only audit signals. It does not include full anchors, full snapshots, frames, terrain rows, or unit rows.
+The object stays compact: owner summaries, candidate signals, evidence anchor ids, aggregate counts, dominance counts, maturity-stage counts, and context-only audit signals. It does not include full anchors, full snapshots, frames, terrain rows, or unit rows.
 
 ## Future Path
 
-Future civilization modules may read these summaries as candidate gate input, but V0.14C and V0.14C.1 do not unlock or activate any civilization variant.
+Future civilization modules may read these summaries as candidate gate input, but V0.14C through V0.15 do not unlock or activate any civilization variant.
 
 The system may say:
 
 ```text
 This Human polity is becoming a river-bound candidate.
+This Human polity has a ready river-bound candidate.
+This Human lineage has a legacy_seed memory-bound candidate.
 ```
 
 It must not say:

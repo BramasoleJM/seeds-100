@@ -21,6 +21,7 @@ const PLACE_CHANGE_DIRECTIONS = new Set(["growing", "declining", "holding", "uns
 const PROTO_CULTURE_MEMORY_VERSION = "0.14B";
 const PROTO_CULTURE_SUMMARY_VERSION = "0.14B.1";
 const HUMAN_CULTURE_CANDIDATE_VERSION = "0.14C";
+const CIVILIZATION_CANDIDATE_MATURITY_VERSION = "0.15";
 const SEMANTIC_TRAITS = Object.freeze({
   RIVER_ADJACENT: "river_adjacent",
   RIVER_CENTER: "river_center",
@@ -8493,6 +8494,14 @@ const HUMAN_CULTURE_CANDIDATE_TYPES = Object.freeze({
   FRONTIER_OUTPOST_POLITY: "frontier_outpost_polity",
   SPLIT_LINEAGE_POLITY: "split_lineage_polity",
 });
+const CIVILIZATION_CANDIDATE_MATURITY_STAGES = Object.freeze({
+  NOT_READY: "not_ready",
+  READY: "ready",
+  RIPE: "ripe",
+  VOLATILE_RIPE: "volatile_ripe",
+  LEGACY_SEED: "legacy_seed",
+  BLOCKED: "blocked",
+});
 const HUMAN_CULTURE_CANDIDATE_DEFS = Object.freeze({
   [HUMAN_CULTURE_CANDIDATE_TYPES.RIVER_BOUND_POLITY]: {
     ownerType: "polity",
@@ -8529,6 +8538,7 @@ const HUMAN_CULTURE_CANDIDATE_DEFS = Object.freeze({
 function createEmptyHumanCultureCandidateSummary() {
   return {
     version: HUMAN_CULTURE_CANDIDATE_VERSION,
+    civilizationMaturityVersion: CIVILIZATION_CANDIDATE_MATURITY_VERSION,
     totalPolities: 0,
     totalLineages: 0,
     politiesWithCandidates: 0,
@@ -8540,6 +8550,17 @@ function createEmptyHumanCultureCandidateSummary() {
     ownerLifecycleCounts: {},
     ambiguousOwnerCount: 0,
     highScoreEmergingCount: 0,
+    maturityStageCounts: {},
+    readinessCounts: {},
+    maturityByCandidateType: {},
+    readyCandidateTypeCounts: {},
+    ripeCandidateTypeCounts: {},
+    volatileRipeCandidateTypeCounts: {},
+    legacySeedCandidateTypeCounts: {},
+    blockedCandidateTypeCounts: {},
+    notReadyCandidateTypeCounts: {},
+    ownerLifecycleMaturityCounts: {},
+    ambiguousMaturityCounts: {},
     byPolity: [],
     byLineage: [],
     contextOnlySignals: [],
@@ -8881,6 +8902,151 @@ function buildCultureCandidateDominance(candidateSignals = {}, ownerLifecycleCla
   };
 }
 
+function clampCivilizationMaturityScore(value) {
+  return Number(Math.min(1, Math.max(0, value || 0)).toFixed(2));
+}
+
+function civilizationDominanceMargin(candidateType, candidateDominance = {}) {
+  const dominant = candidateDominance.dominant || null;
+  if (!dominant || dominant.id !== candidateType) return 0;
+  const second = Array.isArray(candidateDominance.secondary) ? candidateDominance.secondary[0] : null;
+  return Number(Math.max(0, (dominant.dominanceScore || 0) - (second?.dominanceScore || 0)).toFixed(2));
+}
+
+function civilizationMaturityScore(candidateType, signal = {}, owner = {}) {
+  const evidence = signal.evidenceSummary || {};
+  const isDominant = owner.dominantCandidate === candidateType;
+  const margin = civilizationDominanceMargin(candidateType, owner.candidateDominance);
+  const clearDominance = isDominant && (!owner.candidateDominance?.ambiguous || margin >= 0.12);
+  return clampCivilizationMaturityScore(
+    (signal.score || 0) * 0.42 +
+    (signal.dominanceScore || 0) * 0.24 +
+    Math.min(evidence.stableSubjectAnchorCount || 0, 4) * 0.055 +
+    Math.min(evidence.activeSubjectAnchorCount || 0, 6) * 0.02 +
+    Math.min(evidence.uniqueSubjectAnchorCount || 0, 8) * 0.015 +
+    Math.min(evidence.totalSubjectSamples || 0, 12) * 0.008 +
+    (signal.status === "candidate" ? 0.05 : 0) +
+    (isDominant ? 0.04 : 0) +
+    (clearDominance ? 0.04 : 0) -
+    (owner.candidateDominance?.ambiguous ? 0.05 : 0)
+  );
+}
+
+function uniqueShortList(values = [], limit = 6) {
+  return Array.from(new Set(values.filter(Boolean))).slice(0, limit);
+}
+
+function evaluateCivilizationCandidateMaturity(candidateType, signal = {}, owner = {}) {
+  const stage = CIVILIZATION_CANDIDATE_MATURITY_STAGES;
+  const evidence = signal.evidenceSummary || {};
+  const isDominant = owner.dominantCandidate === candidateType;
+  const isSecondary = Array.isArray(owner.secondaryCandidates) && owner.secondaryCandidates.includes(candidateType);
+  const lifecycle = owner.ownerLifecycleClass || signal.ownerLifecycleClass || "unknown";
+  const margin = civilizationDominanceMargin(candidateType, owner.candidateDominance);
+  const ambiguous = Boolean(owner.candidateDominance?.ambiguous);
+  const maturityScore = civilizationMaturityScore(candidateType, signal, owner);
+  const candidateStatus = signal.status === "candidate";
+  const enoughStableSubject = (evidence.stableSubjectAnchorCount || 0) >= 1;
+  const enoughUniqueSubject = (evidence.uniqueSubjectAnchorCount || 0) >= 2;
+  const strongSubjectEvidence = (evidence.stableSubjectAnchorCount || 0) >= 1 &&
+    (((evidence.stableSubjectAnchorCount || 0) >= 2 &&
+      ((evidence.uniqueSubjectAnchorCount || 0) >= 3 || (evidence.totalSubjectSamples || 0) >= 8)) ||
+      (evidence.totalSubjectSamples || 0) >= 12);
+  const clearDominance = isDominant && !ambiguous && margin >= 0.08;
+  const ripeEvidence = strongSubjectEvidence && clearDominance && maturityScore >= 0.86 && (signal.score || 0) >= 0.94;
+  const readyEvidence = isDominant && candidateStatus && enoughStableSubject && enoughUniqueSubject && maturityScore >= 0.68;
+  const reasons = [];
+  const blockers = [];
+
+  if (candidateStatus) reasons.push("candidate_status");
+  else blockers.push("emerging_candidate");
+  if (isDominant) reasons.push("dominant_candidate");
+  if (isSecondary) blockers.push("secondary_candidate");
+  if (enoughStableSubject) reasons.push("stable_human_subject_evidence");
+  else blockers.push("not_enough_stable_human_subject_evidence");
+  if (enoughUniqueSubject) reasons.push("multiple_human_subject_anchors");
+  else blockers.push("not_enough_human_subject_anchors");
+  if ((evidence.uniqueSubjectAnchorCount || 0) <= 0) blockers.push("context_only_evidence");
+  if (clearDominance) reasons.push("clear_dominance");
+  else if (isDominant && ambiguous) blockers.push("ambiguous_owner");
+  else if (isDominant) blockers.push("dominance_not_clear_enough");
+  if (lifecycle === "active") reasons.push("active_owner");
+  if (lifecycle === "at_risk") reasons.push("at_risk_owner");
+  if (lifecycle === "legacy") reasons.push("legacy_owner");
+
+  let maturityStage = stage.NOT_READY;
+  if (!isDominant) {
+    maturityStage = stage.NOT_READY;
+  } else if ((evidence.uniqueSubjectAnchorCount || 0) <= 0) {
+    maturityStage = stage.BLOCKED;
+  } else if (!candidateStatus || !enoughStableSubject || !enoughUniqueSubject) {
+    maturityStage = stage.BLOCKED;
+  } else if (lifecycle === "legacy") {
+    maturityStage = maturityScore >= 0.68 ? stage.LEGACY_SEED : stage.BLOCKED;
+  } else if (lifecycle === "at_risk") {
+    maturityStage = maturityScore >= 0.76 && strongSubjectEvidence ? stage.VOLATILE_RIPE : stage.READY;
+  } else if (ambiguous) {
+    maturityStage = maturityScore >= 0.76 ? stage.READY : stage.BLOCKED;
+  } else if (lifecycle === "active" || lifecycle === "unknown") {
+    if (ripeEvidence) maturityStage = stage.RIPE;
+    else if (readyEvidence) maturityStage = stage.READY;
+    else maturityStage = stage.BLOCKED;
+  }
+
+  if (maturityStage === stage.RIPE) reasons.push("ripe_threshold_met");
+  if (maturityStage === stage.READY) reasons.push("ready_threshold_met");
+  if (maturityStage === stage.VOLATILE_RIPE) reasons.push("strong_direction_but_at_risk");
+  if (maturityStage === stage.LEGACY_SEED) reasons.push("strong_direction_but_legacy");
+  if (maturityStage === stage.BLOCKED && !blockers.length) blockers.push("maturity_threshold_not_met");
+  if (maturityStage === stage.NOT_READY && !blockers.length) blockers.push("not_dominant_direction");
+
+  return {
+    maturityStage,
+    maturityScore,
+    readiness: maturityStage,
+    maturityReasons: uniqueShortList(reasons),
+    maturityBlockers: uniqueShortList(blockers),
+  };
+}
+
+function ownerMaturitySummaryFromSignals(owner = {}) {
+  const stage = CIVILIZATION_CANDIDATE_MATURITY_STAGES;
+  const candidateSignals = owner.candidateSignals || {};
+  const stageBuckets = Object.fromEntries(Object.values(stage).map((id) => [id, []]));
+  const stageCounts = {};
+  for (const [candidateType, signal] of Object.entries(candidateSignals)) {
+    const maturityStage = signal.maturityStage || stage.NOT_READY;
+    if (!stageBuckets[maturityStage]) stageBuckets[maturityStage] = [];
+    stageBuckets[maturityStage].push(candidateType);
+    incrementSummaryCount(stageCounts, maturityStage);
+  }
+  for (const key of Object.keys(stageBuckets)) stageBuckets[key].sort();
+  const maturedCandidate = stageBuckets[stage.RIPE][0] ||
+    stageBuckets[stage.VOLATILE_RIPE][0] ||
+    stageBuckets[stage.LEGACY_SEED][0] ||
+    stageBuckets[stage.READY][0] ||
+    null;
+  const leadingSignal = maturedCandidate ? candidateSignals[maturedCandidate] : null;
+  const leadingBlockers = leadingSignal?.maturityBlockers || Object.values(candidateSignals)[0]?.maturityBlockers || [];
+  return {
+    maturedCandidate,
+    readyCandidates: stageBuckets[stage.READY].slice(0, 4),
+    ripeCandidates: stageBuckets[stage.RIPE].slice(0, 4),
+    volatileRipeCandidates: stageBuckets[stage.VOLATILE_RIPE].slice(0, 4),
+    legacySeedCandidates: stageBuckets[stage.LEGACY_SEED].slice(0, 4),
+    blockedCandidates: stageBuckets[stage.BLOCKED].slice(0, 4),
+    notReadyCandidates: stageBuckets[stage.NOT_READY].slice(0, 4),
+    maturitySummary: {
+      primaryStage: leadingSignal?.maturityStage || stageBuckets[stage.BLOCKED][0] && stage.BLOCKED || stage.NOT_READY,
+      stageCounts: sortedCountObject(stageCounts),
+      ambiguous: Boolean(owner.candidateDominance?.ambiguous),
+      reason: maturedCandidate
+        ? `${maturedCandidate} is ${leadingSignal.maturityStage}.`
+        : `No mature candidate yet: ${leadingBlockers[0] || "maturity_threshold_not_met"}.`,
+    },
+  };
+}
+
 function createCultureCandidateSignal(candidateType, owner, evidence) {
   if (!cultureCandidateMeetsTypeRequirement(candidateType, owner, evidence)) return null;
   const scored = scoreCultureCandidateSignal(candidateType, evidence);
@@ -8932,7 +9098,8 @@ function compactCultureCandidateOwner(owner, signals) {
   const candidateDominance = buildCultureCandidateDominance(Object.fromEntries(entries), ownerLifecycleClass);
   const dominantCandidate = candidateDominance.dominant?.id || null;
   const secondaryCandidates = candidateDominance.secondary.map((item) => item.id).slice(0, 3);
-  return {
+  const candidateSignals = Object.fromEntries(entries);
+  const compactOwner = {
     ownerType: owner.ownerType,
     ownerId: owner.ownerId,
     state: owner.state || null,
@@ -8943,7 +9110,14 @@ function compactCultureCandidateOwner(owner, signals) {
     secondaryCandidates,
     topCandidates: entries.map(([candidateType]) => candidateType),
     candidateDominance,
-    candidateSignals: Object.fromEntries(entries),
+    candidateSignals,
+  };
+  for (const [candidateType, signal] of Object.entries(compactOwner.candidateSignals)) {
+    Object.assign(signal, evaluateCivilizationCandidateMaturity(candidateType, signal, compactOwner));
+  }
+  return {
+    ...compactOwner,
+    ...ownerMaturitySummaryFromSignals(compactOwner),
   };
 }
 
@@ -8952,6 +9126,17 @@ function summarizeHumanCultureCandidateDominance(summary = {}) {
   const secondaryCandidateTypeCounts = {};
   const candidateUseCounts = {};
   const ownerLifecycleCounts = {};
+  const maturityStageCounts = {};
+  const readinessCounts = {};
+  const maturityByCandidateType = {};
+  const readyCandidateTypeCounts = {};
+  const ripeCandidateTypeCounts = {};
+  const volatileRipeCandidateTypeCounts = {};
+  const legacySeedCandidateTypeCounts = {};
+  const blockedCandidateTypeCounts = {};
+  const notReadyCandidateTypeCounts = {};
+  const ownerLifecycleMaturityCounts = {};
+  const ambiguousMaturityCounts = {};
   let ambiguousOwnerCount = 0;
   let highScoreEmergingCount = 0;
   const owners = [...(summary.byPolity || []), ...(summary.byLineage || [])];
@@ -8961,6 +9146,20 @@ function summarizeHumanCultureCandidateDominance(summary = {}) {
     for (const candidateType of owner.secondaryCandidates || []) incrementSummaryCount(secondaryCandidateTypeCounts, candidateType);
     if (owner.candidateDominance?.ambiguous) ambiguousOwnerCount += 1;
     for (const signal of Object.values(owner.candidateSignals || {})) {
+      const maturityStage = signal.maturityStage || CIVILIZATION_CANDIDATE_MATURITY_STAGES.NOT_READY;
+      incrementSummaryCount(maturityStageCounts, maturityStage);
+      incrementSummaryCount(readinessCounts, signal.readiness || maturityStage);
+      incrementSummaryCount(ownerLifecycleMaturityCounts, `${owner.ownerLifecycleClass || "unknown"}:${maturityStage}`);
+      if (owner.candidateDominance?.ambiguous) incrementSummaryCount(ambiguousMaturityCounts, maturityStage);
+      const candidateType = Object.entries(owner.candidateSignals || {}).find(([, value]) => value === signal)?.[0] || "unknown";
+      if (!maturityByCandidateType[candidateType]) maturityByCandidateType[candidateType] = {};
+      incrementSummaryCount(maturityByCandidateType[candidateType], maturityStage);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.READY) incrementSummaryCount(readyCandidateTypeCounts, candidateType);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.RIPE) incrementSummaryCount(ripeCandidateTypeCounts, candidateType);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.VOLATILE_RIPE) incrementSummaryCount(volatileRipeCandidateTypeCounts, candidateType);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.LEGACY_SEED) incrementSummaryCount(legacySeedCandidateTypeCounts, candidateType);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.BLOCKED) incrementSummaryCount(blockedCandidateTypeCounts, candidateType);
+      if (maturityStage === CIVILIZATION_CANDIDATE_MATURITY_STAGES.NOT_READY) incrementSummaryCount(notReadyCandidateTypeCounts, candidateType);
       incrementSummaryCount(candidateUseCounts, signal.candidateUse || classifyCandidateUse(owner.ownerLifecycleClass));
       if (signal.status === "emerging" && (signal.score || 0) >= 0.85) highScoreEmergingCount += 1;
     }
@@ -8971,6 +9170,19 @@ function summarizeHumanCultureCandidateDominance(summary = {}) {
   summary.ownerLifecycleCounts = sortedCountObject(ownerLifecycleCounts);
   summary.ambiguousOwnerCount = ambiguousOwnerCount;
   summary.highScoreEmergingCount = highScoreEmergingCount;
+  summary.maturityStageCounts = sortedCountObject(maturityStageCounts);
+  summary.readinessCounts = sortedCountObject(readinessCounts);
+  summary.maturityByCandidateType = Object.fromEntries(Object.entries(maturityByCandidateType)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([candidateType, counts]) => [candidateType, sortedCountObject(counts)]));
+  summary.readyCandidateTypeCounts = sortedCountObject(readyCandidateTypeCounts);
+  summary.ripeCandidateTypeCounts = sortedCountObject(ripeCandidateTypeCounts);
+  summary.volatileRipeCandidateTypeCounts = sortedCountObject(volatileRipeCandidateTypeCounts);
+  summary.legacySeedCandidateTypeCounts = sortedCountObject(legacySeedCandidateTypeCounts);
+  summary.blockedCandidateTypeCounts = sortedCountObject(blockedCandidateTypeCounts);
+  summary.notReadyCandidateTypeCounts = sortedCountObject(notReadyCandidateTypeCounts);
+  summary.ownerLifecycleMaturityCounts = sortedCountObject(ownerLifecycleMaturityCounts);
+  summary.ambiguousMaturityCounts = sortedCountObject(ambiguousMaturityCounts);
   return summary;
 }
 
@@ -10694,11 +10906,58 @@ function aggregateHumanCultureCandidateTotals(target, summary = {}) {
   if (!target.secondaryCandidateTypeCounts) target.secondaryCandidateTypeCounts = {};
   if (!target.candidateUseCounts) target.candidateUseCounts = {};
   if (!target.ownerLifecycleCounts) target.ownerLifecycleCounts = {};
+  if (!target.maturityStageCounts) target.maturityStageCounts = {};
+  if (!target.readinessCounts) target.readinessCounts = {};
+  if (!target.maturityByCandidateType) target.maturityByCandidateType = {};
+  if (!target.readyCandidateTypeCounts) target.readyCandidateTypeCounts = {};
+  if (!target.ripeCandidateTypeCounts) target.ripeCandidateTypeCounts = {};
+  if (!target.volatileRipeCandidateTypeCounts) target.volatileRipeCandidateTypeCounts = {};
+  if (!target.legacySeedCandidateTypeCounts) target.legacySeedCandidateTypeCounts = {};
+  if (!target.blockedCandidateTypeCounts) target.blockedCandidateTypeCounts = {};
+  if (!target.notReadyCandidateTypeCounts) target.notReadyCandidateTypeCounts = {};
+  if (!target.ownerLifecycleMaturityCounts) target.ownerLifecycleMaturityCounts = {};
+  if (!target.ambiguousMaturityCounts) target.ambiguousMaturityCounts = {};
   mergeCountObjects(target.candidateTypeCounts, summary.candidateTypeCounts || {});
   mergeCountObjects(target.dominantCandidateTypeCounts, summary.dominantCandidateTypeCounts || {});
   mergeCountObjects(target.secondaryCandidateTypeCounts, summary.secondaryCandidateTypeCounts || {});
   mergeCountObjects(target.candidateUseCounts, summary.candidateUseCounts || {});
   mergeCountObjects(target.ownerLifecycleCounts, summary.ownerLifecycleCounts || {});
+  mergeCountObjects(target.maturityStageCounts, summary.maturityStageCounts || {});
+  mergeCountObjects(target.readinessCounts, summary.readinessCounts || {});
+  for (const [candidateType, counts] of Object.entries(summary.maturityByCandidateType || {})) {
+    if (!target.maturityByCandidateType[candidateType]) target.maturityByCandidateType[candidateType] = {};
+    mergeCountObjects(target.maturityByCandidateType[candidateType], counts || {});
+  }
+  mergeCountObjects(target.readyCandidateTypeCounts, summary.readyCandidateTypeCounts || {});
+  mergeCountObjects(target.ripeCandidateTypeCounts, summary.ripeCandidateTypeCounts || {});
+  mergeCountObjects(target.volatileRipeCandidateTypeCounts, summary.volatileRipeCandidateTypeCounts || {});
+  mergeCountObjects(target.legacySeedCandidateTypeCounts, summary.legacySeedCandidateTypeCounts || {});
+  mergeCountObjects(target.blockedCandidateTypeCounts, summary.blockedCandidateTypeCounts || {});
+  mergeCountObjects(target.notReadyCandidateTypeCounts, summary.notReadyCandidateTypeCounts || {});
+  mergeCountObjects(target.ownerLifecycleMaturityCounts, summary.ownerLifecycleMaturityCounts || {});
+  mergeCountObjects(target.ambiguousMaturityCounts, summary.ambiguousMaturityCounts || {});
+}
+
+function sortHumanCultureCandidateAggregate(target = {}) {
+  target.candidateTypeCounts = sortedCountObject(target.candidateTypeCounts || {});
+  target.dominantCandidateTypeCounts = sortedCountObject(target.dominantCandidateTypeCounts || {});
+  target.secondaryCandidateTypeCounts = sortedCountObject(target.secondaryCandidateTypeCounts || {});
+  target.candidateUseCounts = sortedCountObject(target.candidateUseCounts || {});
+  target.ownerLifecycleCounts = sortedCountObject(target.ownerLifecycleCounts || {});
+  target.maturityStageCounts = sortedCountObject(target.maturityStageCounts || {});
+  target.readinessCounts = sortedCountObject(target.readinessCounts || {});
+  target.maturityByCandidateType = Object.fromEntries(Object.entries(target.maturityByCandidateType || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([candidateType, counts]) => [candidateType, sortedCountObject(counts)]));
+  target.readyCandidateTypeCounts = sortedCountObject(target.readyCandidateTypeCounts || {});
+  target.ripeCandidateTypeCounts = sortedCountObject(target.ripeCandidateTypeCounts || {});
+  target.volatileRipeCandidateTypeCounts = sortedCountObject(target.volatileRipeCandidateTypeCounts || {});
+  target.legacySeedCandidateTypeCounts = sortedCountObject(target.legacySeedCandidateTypeCounts || {});
+  target.blockedCandidateTypeCounts = sortedCountObject(target.blockedCandidateTypeCounts || {});
+  target.notReadyCandidateTypeCounts = sortedCountObject(target.notReadyCandidateTypeCounts || {});
+  target.ownerLifecycleMaturityCounts = sortedCountObject(target.ownerLifecycleMaturityCounts || {});
+  target.ambiguousMaturityCounts = sortedCountObject(target.ambiguousMaturityCounts || {});
+  return target;
 }
 
 function humanFallbackAuditTargets(source = world) {
@@ -10822,6 +11081,17 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
     ownerLifecycleCounts: {},
     ambiguousOwnerCount: 0,
     highScoreEmergingCount: 0,
+    maturityStageCounts: {},
+    readinessCounts: {},
+    maturityByCandidateType: {},
+    readyCandidateTypeCounts: {},
+    ripeCandidateTypeCounts: {},
+    volatileRipeCandidateTypeCounts: {},
+    legacySeedCandidateTypeCounts: {},
+    blockedCandidateTypeCounts: {},
+    notReadyCandidateTypeCounts: {},
+    ownerLifecycleMaturityCounts: {},
+    ambiguousMaturityCounts: {},
     humanCultureCandidateTotals: {
       totalPolitiesWithCandidates: 0,
       totalLineagesWithCandidates: 0,
@@ -10832,6 +11102,17 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
       ownerLifecycleCounts: {},
       ambiguousOwnerCount: 0,
       highScoreEmergingCount: 0,
+      maturityStageCounts: {},
+      readinessCounts: {},
+      maturityByCandidateType: {},
+      readyCandidateTypeCounts: {},
+      ripeCandidateTypeCounts: {},
+      volatileRipeCandidateTypeCounts: {},
+      legacySeedCandidateTypeCounts: {},
+      blockedCandidateTypeCounts: {},
+      notReadyCandidateTypeCounts: {},
+      ownerLifecycleMaturityCounts: {},
+      ambiguousMaturityCounts: {},
     },
   };
 
@@ -10889,16 +11170,8 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
     aggregate.stableHintCounts = sortedCountObject(aggregate.stableHintCounts);
     aggregate.activeHintCounts = sortedCountObject(aggregate.activeHintCounts);
     aggregate.anchorTypeWithHintCounts = sortedCountObject(aggregate.anchorTypeWithHintCounts);
-    aggregate.humanCultureCandidateTotals.candidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.candidateTypeCounts);
-    aggregate.humanCultureCandidateTotals.dominantCandidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.dominantCandidateTypeCounts);
-    aggregate.humanCultureCandidateTotals.secondaryCandidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.secondaryCandidateTypeCounts);
-    aggregate.humanCultureCandidateTotals.candidateUseCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.candidateUseCounts);
-    aggregate.humanCultureCandidateTotals.ownerLifecycleCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.ownerLifecycleCounts);
-    aggregate.candidateTypeCounts = sortedCountObject(aggregate.candidateTypeCounts);
-    aggregate.dominantCandidateTypeCounts = sortedCountObject(aggregate.dominantCandidateTypeCounts);
-    aggregate.secondaryCandidateTypeCounts = sortedCountObject(aggregate.secondaryCandidateTypeCounts);
-    aggregate.candidateUseCounts = sortedCountObject(aggregate.candidateUseCounts);
-    aggregate.ownerLifecycleCounts = sortedCountObject(aggregate.ownerLifecycleCounts);
+    sortHumanCultureCandidateAggregate(aggregate.humanCultureCandidateTotals);
+    sortHumanCultureCandidateAggregate(aggregate);
     return JSON.parse(JSON.stringify({
       version: PROTO_CULTURE_EXPORT_VERSION,
       ticks: ticksToRun,
@@ -10933,6 +11206,20 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
     updateMacroTimelineStatus();
     refreshMapSeedTextarea();
   }
+}
+
+function runCivilizationMaturityAuditForSeedsForTest(options = {}) {
+  const audit = runProtoCultureSummaryAuditForSeedsForTest(options);
+  return JSON.parse(JSON.stringify({
+    type: "tri_species_civilization_candidate_maturity_audit",
+    version: CIVILIZATION_CANDIDATE_MATURITY_VERSION,
+    sourceVersion: audit.version,
+    ticks: audit.ticks,
+    inspectEvery: audit.inspectEvery,
+    runs: audit.runs,
+    aggregate: audit.aggregate,
+    civilizationCandidateMaturitySummary: audit.aggregate?.humanCultureCandidateTotals || {},
+  }));
 }
 
 function createSnapshotExport() {
@@ -11864,6 +12151,7 @@ window.__triSpeciesSim = {
   PLACE_ARCHETYPES,
   PROTO_CULTURE_HINTS,
   HUMAN_CULTURE_CANDIDATE_TYPES,
+  CIVILIZATION_CANDIDATE_MATURITY_STAGES,
   EXPLORE_CONFIG: {
     cols: EXPLORE_VIEWPORT_COLS,
     rows: EXPLORE_VIEWPORT_ROWS,
@@ -12004,6 +12292,7 @@ window.__triSpeciesSim = {
     return JSON.parse(JSON.stringify(collectCurrentPlaceReviewTargets(source)));
   },
   runProtoCultureSummaryAuditForSeedsForTest,
+  runCivilizationMaturityAuditForSeedsForTest,
   getLastWakeReportForTest() {
     const report = placeMemory.wakeReports[placeMemory.wakeReports.length - 1] || null;
     return report ? JSON.parse(JSON.stringify(report)) : null;

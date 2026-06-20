@@ -31,9 +31,10 @@ Docs/Architecture/MACRO_PATTERNS.md
 Docs/Architecture/HUMAN_IDENTITY_STATES.md
 Docs/Architecture/PROTO_CULTURE_HINTS.md
 Docs/Architecture/HUMAN_CULTURE_CANDIDATES.md
+Docs/Architecture/CIVILIZATION_CANDIDATE_MATURITY.md
 ```
 
-These architecture docs describe the current observer layers and the V0.14C.1 Human culture candidate maturity / dominance audit direction.
+These architecture docs describe the current observer layers and the V0.15 civilization candidate maturity gate direction.
 
 ---
 
@@ -91,13 +92,13 @@ Stable snapshots and backup zips. Do not edit backup contents during normal deve
 Current completed stage:
 
 ```text
-TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+TRI_SPECIES_WORLD_SIM_V0.15_CIVILIZATION_CANDIDATE_MATURITY_GATES
 ```
 
 Recommended next stage:
 
 ```text
-Next observer-only audit or tuning task, after reviewing V0.14B.2 lightweight proto-culture summaries and multi-seed audits.
+V0.16 Civilization Module Specification, still without broad gameplay mutation.
 ```
 
 V0.14B added compact `protoCultureHints` and anchor-level `protoCultureMemory` to Place Memory for Human-related inspected places.
@@ -106,16 +107,18 @@ V0.14B.1 adds compact export-derived `protoCultureSummary` inside `placeMemory` 
 V0.14B.2 adds a lightweight Recording-panel proto-culture summary export, compact multi-seed proto-culture audit helper, generated-world river map features, and clearer Explore blocker visuals.
 V0.14C adds `humanCultureCandidateSummary`, an export-derived Human polity / lineage rollup over existing place-level proto-culture memory.
 V0.14C.1 adds owner lifecycle, candidate use, dominant / secondary candidate ranking, evidence summaries, maturity reasons, and aggregate dominance counts to `humanCultureCandidateSummary`.
+V0.15 adds observer-only candidate maturity gates: `ready`, `ripe`, `volatile_ripe`, `legacy_seed`, `blocked`, and `not_ready`.
 
 ```text
 protoCultureHints are observer-only interpretation signals.
 protoCultureSummary is export-only audit data.
 humanCultureCandidateSummary is observer-only export / analysis data.
 V0.14C.1 maturity / dominance fields are observer-only export / readability data.
+V0.15 civilization candidate maturity fields are observer-only export / audit data, not unlocks.
 protoCultureHints are not civilizations, factions, AI, resources, buildings, NPCs, story events, myth events, quests, or tarot mechanics.
 protoCultureHints and protoCultureSummary must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, or Explore movement.
 humanCultureCandidateSummary must not change H/B/S ecology, movement, fertility, POI behavior, terrain, units, tick order, river blockers, Explore movement, proto-culture hint scoring, proto-culture memory updates, or wake report sparsity.
-V0.14C.1 changes only compact exports, audit helpers, docs, and tests.
+V0.15 changes only compact exports, audit helpers, docs, generated audit output, and tests.
 ```
 
 Do not add multi-screen maps, NPCs, quests, resource economy, buildings, civilization gameplay, AI calls, tarot mechanics, save/load, network calls, or external libraries yet.

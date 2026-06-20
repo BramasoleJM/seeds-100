@@ -93,3 +93,20 @@ missing or unexpected -> unknown
 Collapsed, remnant, and abandoned owners export `legacy` / `legacy_candidate`. They are historical candidate context, not active civilization unlock candidates.
 
 Unknown lifecycle owners use `active_candidate` as a deterministic fallback only. This does not claim current ownership, readiness, or gameplay effect.
+
+## V0.15 Relation
+
+Civilization candidate maturity gates read Human culture candidate owners and their `ownerLifecycleClass`.
+
+Lifecycle affects export-only maturity labels:
+
+```text
+active/stable/expanding/split/promotable -> active owners may become ready or ripe
+pressured/seatless/declining/fading -> strong mature directions become volatile_ripe
+collapsed/remnant/abandoned -> strong mature directions become legacy_seed
+missing or unexpected -> unknown fallback, documented as audit-only
+```
+
+`ready`, `ripe`, `volatile_ripe`, `legacy_seed`, `blocked`, and `not_ready` are observer-only export states. They do not change lineage, polity, village, outpost, seat, old seat, remnant, ownership detection, proto-culture hint scoring, proto-culture memory updates, wake reports, or any H/B/S ecology rule.
+
+Legacy maturity is historical context only. It is not an active civilization unlock.

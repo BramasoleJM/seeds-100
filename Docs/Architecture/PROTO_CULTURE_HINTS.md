@@ -269,6 +269,45 @@ This does not change `protoCultureHints`, proto-culture scoring, Human-related g
 
 Context-only anchors remain context-only and cannot own Human culture candidates.
 
+## V0.15 Civilization Candidate Maturity Gates
+
+V0.15 adds observer-only maturity gates to the existing Human culture candidate summary.
+
+It reads V0.14C.1 candidate signals and derives:
+
+```text
+maturityStage
+maturityScore
+readiness
+maturityReasons
+maturityBlockers
+maturedCandidate
+readyCandidates
+ripeCandidates
+volatileRipeCandidates
+legacySeedCandidates
+blockedCandidates
+notReadyCandidates
+maturitySummary
+```
+
+Allowed maturity stages:
+
+```text
+not_ready
+ready
+ripe
+volatile_ripe
+legacy_seed
+blocked
+```
+
+This layer does not change `protoCultureHints`, proto-culture scoring, Human-related gates, `protoCultureMemory` update rules, semantic traits, place archetypes, wake report sparsity, movement, terrain, units, fertility, POI behavior, river blockers, Explore movement, or any H/B/S ecology rule.
+
+Context-only anchors remain context-only. POIs, scars, rivers, forests, Springs, Great Forests, Rot Sources, and Beast ranges cannot create ready or ripe Human civilization candidates by themselves.
+
+V0.15 does not implement civilization modules, unlocks, AI, tarot, story events, myth events, resources, buildings, NPCs, quests, new terrain, new units, save/load, network calls, or multi-screen maps.
+
 ## Future Use
 
-Future civilization modules may read these hints as candidate signals, but V0.14B does not implement civilization modules or gameplay behavior.
+Future civilization modules may read these hints and maturity gates as candidate signals, but V0.14B through V0.15 do not implement civilization modules or gameplay behavior.

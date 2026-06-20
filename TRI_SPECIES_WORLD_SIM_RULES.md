@@ -5070,12 +5070,114 @@ Dominance ranking is compact and deterministic, designed for audit readability r
 
 ---
 
+## 72.7 V0.15 Civilization Candidate Maturity Gates
+
+V0.15 adds observer-only maturity gates to `humanCultureCandidateSummary`.
+
+It is export / audit / readability data only.
+
+It does not change Human, Beast, or Spirit movement, lifecycle, conflict, conversion, reproduction, terrain rewriting, fertility balance, POI ecology effects, river blocker behavior, terrain decay, grid size, terrain types, unit types, Explore movement, tick order, map seed behavior, semantic trait derivation, place archetype priority, proto-culture hint scoring, proto-culture memory update rules, Human identity ownership rules, Human-related proto-culture gates, V0.14C base candidate scoring, V0.14C.1 dominance ranking, protoCultureSummary counts, or wake report sparsity.
+
+New candidate signal fields:
+
+```text
+maturityStage
+maturityScore
+readiness
+maturityReasons
+maturityBlockers
+```
+
+New owner fields:
+
+```text
+maturedCandidate
+readyCandidates
+ripeCandidates
+volatileRipeCandidates
+legacySeedCandidates
+blockedCandidates
+notReadyCandidates
+maturitySummary
+```
+
+Maturity stages:
+
+```text
+not_ready
+ready
+ripe
+volatile_ripe
+legacy_seed
+blocked
+```
+
+Lifecycle interpretation:
+
+```text
+active/stable/expanding/split/promotable owners may become ready or ripe.
+pressured/seatless/declining/fading owners with strong mature direction become volatile_ripe.
+collapsed/remnant/abandoned owners with strong mature direction become legacy_seed.
+missing or unexpected owners use the unknown audit fallback.
+```
+
+Threshold summary:
+
+```text
+ready requires a dominant candidate signal, candidate status, at least one stable Human subject anchor, at least two unique Human subject anchors, and maturityScore >= 0.68.
+ripe requires active/unknown lifecycle, clear non-ambiguous dominance margin >= 0.08, strong Human subject evidence, base candidate score >= 0.94, and maturityScore >= 0.86.
+at_risk strong maturity becomes volatile_ripe rather than stable ripe.
+legacy strong maturity becomes legacy_seed rather than active ready or ripe.
+secondary candidates normally remain not_ready.
+ambiguous owners may be ready or blocked but do not become stable ripe.
+```
+
+Aggregate additions:
+
+```text
+maturityStageCounts
+readinessCounts
+maturityByCandidateType
+readyCandidateTypeCounts
+ripeCandidateTypeCounts
+volatileRipeCandidateTypeCounts
+legacySeedCandidateTypeCounts
+blockedCandidateTypeCounts
+notReadyCandidateTypeCounts
+ownerLifecycleMaturityCounts
+ambiguousMaturityCounts
+```
+
+Audit helper:
+
+```text
+runCivilizationMaturityAuditForSeedsForTest wraps the existing proto-culture audit helper and exposes compact V0.15 maturity aggregate data for review.
+```
+
+Observer-only limits:
+
+```text
+V0.15 does not unlock civilizations.
+V0.15 does not add civilization modules, civilization gameplay, factions, AI, tarot, story events, myth events, resources, buildings, NPCs, quests, save/load, network calls, new terrain, new units, or multi-screen maps.
+Context-only anchors such as POIs, scars, rivers, forests, Beast ranges, springs, and ordinary places still cannot own or mature Human civilization candidates by themselves.
+```
+
+Known simplifications:
+
+```text
+MaturityScore is a compact deterministic export score, not a gameplay timer.
+Strong Human subject evidence can come from multiple stable subject anchors or from accumulated subject samples.
+Unknown lifecycle owners use the active-style maturity fallback only for deterministic audit compatibility.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+Rules version: TRI_SPECIES_WORLD_SIM_V0.15_CIVILIZATION_CANDIDATE_MATURITY_GATES
 Date: 2026-06-20
-Status: V0.14C.1 Human Culture Candidate Maturity & Dominance Audit implemented
+Status: V0.15 Civilization Candidate Maturity Gates implemented
 ```
 
 Current version split:
@@ -5134,6 +5236,7 @@ Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_RE
 Explore / river / proto-culture audit usability: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
 Human culture candidate rollup: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
 Human culture candidate maturity / dominance audit: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+Civilization candidate maturity gates: TRI_SPECIES_WORLD_SIM_V0.15_CIVILIZATION_CANDIDATE_MATURITY_GATES
 ```
 
 V0.8.3 notes:
