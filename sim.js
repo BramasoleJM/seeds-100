@@ -8534,6 +8534,12 @@ function createEmptyHumanCultureCandidateSummary() {
     politiesWithCandidates: 0,
     lineagesWithCandidates: 0,
     candidateTypeCounts: {},
+    dominantCandidateTypeCounts: {},
+    secondaryCandidateTypeCounts: {},
+    candidateUseCounts: {},
+    ownerLifecycleCounts: {},
+    ambiguousOwnerCount: 0,
+    highScoreEmergingCount: 0,
     byPolity: [],
     byLineage: [],
     contextOnlySignals: [],
@@ -8764,52 +8770,208 @@ function cultureCandidateReason(candidateType, status) {
   return `${prefix} Human culture candidate evidence was observed.`;
 }
 
+function classifyCultureOwnerLifecycle(owner = {}) {
+  const state = String(owner.state || "").toLowerCase();
+  if (["active", "stable", "expanding", "split", "promotable"].includes(state)) return "active";
+  if (["pressured", "seatless", "declining", "fading"].includes(state)) return "at_risk";
+  if (["collapsed", "remnant", "abandoned"].includes(state)) return "legacy";
+  return "unknown";
+}
+
+function classifyCandidateUse(ownerLifecycleClass = "unknown") {
+  if (ownerLifecycleClass === "legacy") return "legacy_candidate";
+  if (ownerLifecycleClass === "at_risk") return "at_risk_candidate";
+  return "active_candidate";
+}
+
+function sumCultureEvidenceSamples(item, hintIds = []) {
+  const signals = item?.anchor?.protoCultureMemory?.signals || {};
+  let total = 0;
+  for (const id of hintIds) {
+    total += Math.max(0, Math.floor(signals[id]?.samples || 0));
+  }
+  return total;
+}
+
+function summarizeCandidateEvidence(evidence = {}, displayedSubjectAnchors = [], displayedContextAnchors = []) {
+  const hintIds = evidence.hintIds || [];
+  const uniqueSubjectRefs = new Set((evidence.subject || []).map((item) => item.anchorRef).filter(Boolean));
+  const uniqueContextRefs = new Set((evidence.context || []).map((item) => item.anchorRef).filter(Boolean));
+  return {
+    uniqueSubjectAnchorCount: uniqueSubjectRefs.size,
+    uniqueContextAnchorCount: uniqueContextRefs.size,
+    stableSubjectAnchorCount: (evidence.subject || []).filter((item) => anchorHasStableCultureHint(item.anchor, hintIds)).length,
+    activeSubjectAnchorCount: (evidence.subject || []).filter((item) => anchorHasActiveCultureHint(item.anchor, hintIds)).length,
+    totalSubjectSamples: (evidence.subject || []).reduce((sum, item) => sum + sumCultureEvidenceSamples(item, hintIds), 0),
+    totalContextSamples: (evidence.context || []).reduce((sum, item) => sum + sumCultureEvidenceSamples(item, hintIds), 0),
+    displayedSubjectAnchorCount: displayedSubjectAnchors.length,
+    displayedContextAnchorCount: displayedContextAnchors.length,
+  };
+}
+
+function buildCandidateMaturityReason(signal = {}, evidenceSummary = {}) {
+  if (signal.status === "candidate") {
+    return "Candidate: score >= 0.65 with enough stable Human subject evidence.";
+  }
+  if ((signal.score || 0) >= 0.85 && (evidenceSummary.uniqueSubjectAnchorCount || 0) <= 1) {
+    return "Emerging despite high score: only one unique Human subject anchor is resolved.";
+  }
+  if ((evidenceSummary.uniqueSubjectAnchorCount || 0) < 2) {
+    return "Emerging: not enough unique Human subject anchors are resolved.";
+  }
+  if ((evidenceSummary.stableSubjectAnchorCount || 0) < 1) {
+    return "Emerging: not enough stable Human subject evidence is resolved.";
+  }
+  return "Emerging: candidate evidence is present but has not reached maturity.";
+}
+
+function cultureCandidateDominanceScore(signal = {}) {
+  const evidenceSummary = signal.evidenceSummary || {};
+  return Number(Math.min(1, Math.max(0,
+    (signal.score || 0) * 0.70 +
+    Math.min(evidenceSummary.stableSubjectAnchorCount || 0, 4) * 0.06 +
+    Math.min(evidenceSummary.activeSubjectAnchorCount || 0, 6) * 0.025 +
+    Math.min(evidenceSummary.uniqueSubjectAnchorCount || 0, 8) * 0.01 +
+    (signal.status === "candidate" ? 0.05 : 0)
+  )).toFixed(2));
+}
+
+function rankCultureCandidateSignals(candidateSignals = {}) {
+  return Object.entries(candidateSignals || {})
+    .filter(([, signal]) => signal?.status)
+    .sort((a, b) =>
+      Number(b[1].status === "candidate") - Number(a[1].status === "candidate") ||
+      (b[1].dominanceScore || 0) - (a[1].dominanceScore || 0) ||
+      (b[1].score || 0) - (a[1].score || 0) ||
+      (b[1].evidenceSummary?.stableSubjectAnchorCount || 0) - (a[1].evidenceSummary?.stableSubjectAnchorCount || 0) ||
+      (b[1].evidenceSummary?.activeSubjectAnchorCount || 0) - (a[1].evidenceSummary?.activeSubjectAnchorCount || 0) ||
+      (b[1].evidenceSummary?.uniqueSubjectAnchorCount || 0) - (a[1].evidenceSummary?.uniqueSubjectAnchorCount || 0) ||
+      (b[1].evidenceSummary?.uniqueContextAnchorCount || 0) - (a[1].evidenceSummary?.uniqueContextAnchorCount || 0) ||
+      a[0].localeCompare(b[0])
+    );
+}
+
+function compactDominanceSignal(candidateType, signal = {}, ownerLifecycleClass = "unknown") {
+  return {
+    id: candidateType,
+    score: signal.score || 0,
+    status: signal.status || null,
+    candidateUse: signal.candidateUse || classifyCandidateUse(ownerLifecycleClass),
+    ownerLifecycleClass: signal.ownerLifecycleClass || ownerLifecycleClass,
+    dominanceScore: signal.dominanceScore || 0,
+  };
+}
+
+function buildCultureCandidateDominance(candidateSignals = {}, ownerLifecycleClass = "unknown") {
+  const ranked = rankCultureCandidateSignals(candidateSignals);
+  const dominantEntry = ranked[0] || null;
+  const secondaryEntries = ranked.slice(1, 4);
+  const ambiguous = Boolean(ranked.length > 1 && Math.abs((ranked[0][1].dominanceScore || 0) - (ranked[1][1].dominanceScore || 0)) < 0.08);
+  return {
+    dominant: dominantEntry ? {
+      ...compactDominanceSignal(dominantEntry[0], dominantEntry[1], ownerLifecycleClass),
+      ambiguous,
+      reason: ambiguous
+        ? "Highest candidate is close to another candidate direction."
+        : "Highest candidate score with strongest stable Human subject evidence.",
+    } : null,
+    secondary: secondaryEntries.map(([candidateType, signal]) => compactDominanceSignal(candidateType, signal, ownerLifecycleClass)),
+    ambiguous,
+    ambiguityReason: ambiguous ? "Top two candidate directions have similar dominance scores." : null,
+  };
+}
+
 function createCultureCandidateSignal(candidateType, owner, evidence) {
   if (!cultureCandidateMeetsTypeRequirement(candidateType, owner, evidence)) return null;
   const scored = scoreCultureCandidateSignal(candidateType, evidence);
   if (!scored.status) return null;
   const def = HUMAN_CULTURE_CANDIDATE_DEFS[candidateType];
+  const ownerLifecycleClass = classifyCultureOwnerLifecycle(owner);
+  const subjectEvidenceAnchors = evidence.subject
+    .slice()
+    .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
+    .slice(0, 6)
+    .map((item) => item.anchorRef);
+  const contextEvidenceAnchors = evidence.context
+    .slice()
+    .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
+    .slice(0, 4)
+    .map((item) => item.anchorRef);
+  const evidenceSummary = summarizeCandidateEvidence(evidence, subjectEvidenceAnchors, contextEvidenceAnchors);
   const sourceHints = def.sourceHints.filter((id) =>
     evidence.subject.some((item) => (item.scores[id] || 0) > 0) ||
     evidence.context.some((item) => (item.scores[id] || 0) > 0)
   );
-  return {
+  const signal = {
     score: scored.score,
     status: scored.status,
+    candidateUse: classifyCandidateUse(ownerLifecycleClass),
+    ownerLifecycleClass,
     primaryHint: def.primaryHint,
-    subjectEvidenceAnchors: evidence.subject
-      .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
-      .slice(0, 6)
-      .map((item) => item.anchorRef),
-    contextEvidenceAnchors: evidence.context
-      .sort((a, b) => strongestAnchorHintScore(b.anchor, evidence.hintIds) - strongestAnchorHintScore(a.anchor, evidence.hintIds) || a.anchorRef.localeCompare(b.anchorRef))
-      .slice(0, 4)
-      .map((item) => item.anchorRef),
+    subjectEvidenceAnchors,
+    contextEvidenceAnchors,
     evidenceCounts: {
       subject: evidence.subject.length,
       context: evidence.context.length,
       stableSubject: evidence.subject.filter((item) => anchorHasStableCultureHint(item.anchor, evidence.hintIds)).length,
       activeSubject: evidence.subject.filter((item) => anchorHasActiveCultureHint(item.anchor, evidence.hintIds)).length,
     },
+    evidenceSummary,
     sourceHints: sourceHints.slice(0, 4),
+    maturityReason: null,
     reason: cultureCandidateReason(candidateType, scored.status),
   };
+  signal.dominanceScore = cultureCandidateDominanceScore(signal);
+  signal.maturityReason = buildCandidateMaturityReason(signal, evidenceSummary);
+  return signal;
 }
 
 function compactCultureCandidateOwner(owner, signals) {
-  const entries = Object.entries(signals || {})
-    .filter(([, signal]) => signal?.status)
-    .sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0]))
-    .slice(0, 4);
+  const ownerLifecycleClass = classifyCultureOwnerLifecycle(owner);
+  const entries = rankCultureCandidateSignals(signals).slice(0, 4);
+  const candidateDominance = buildCultureCandidateDominance(Object.fromEntries(entries), ownerLifecycleClass);
+  const dominantCandidate = candidateDominance.dominant?.id || null;
+  const secondaryCandidates = candidateDominance.secondary.map((item) => item.id).slice(0, 3);
   return {
     ownerType: owner.ownerType,
     ownerId: owner.ownerId,
     state: owner.state || null,
+    ownerLifecycleClass,
     rootLineageId: owner.rootLineageId || null,
     rootPolityId: owner.rootPolityId || null,
+    dominantCandidate,
+    secondaryCandidates,
     topCandidates: entries.map(([candidateType]) => candidateType),
+    candidateDominance,
     candidateSignals: Object.fromEntries(entries),
   };
+}
+
+function summarizeHumanCultureCandidateDominance(summary = {}) {
+  const dominantCandidateTypeCounts = {};
+  const secondaryCandidateTypeCounts = {};
+  const candidateUseCounts = {};
+  const ownerLifecycleCounts = {};
+  let ambiguousOwnerCount = 0;
+  let highScoreEmergingCount = 0;
+  const owners = [...(summary.byPolity || []), ...(summary.byLineage || [])];
+  for (const owner of owners) {
+    incrementSummaryCount(ownerLifecycleCounts, owner.ownerLifecycleClass || "unknown");
+    if (owner.dominantCandidate) incrementSummaryCount(dominantCandidateTypeCounts, owner.dominantCandidate);
+    for (const candidateType of owner.secondaryCandidates || []) incrementSummaryCount(secondaryCandidateTypeCounts, candidateType);
+    if (owner.candidateDominance?.ambiguous) ambiguousOwnerCount += 1;
+    for (const signal of Object.values(owner.candidateSignals || {})) {
+      incrementSummaryCount(candidateUseCounts, signal.candidateUse || classifyCandidateUse(owner.ownerLifecycleClass));
+      if (signal.status === "emerging" && (signal.score || 0) >= 0.85) highScoreEmergingCount += 1;
+    }
+  }
+  summary.dominantCandidateTypeCounts = sortedCountObject(dominantCandidateTypeCounts);
+  summary.secondaryCandidateTypeCounts = sortedCountObject(secondaryCandidateTypeCounts);
+  summary.candidateUseCounts = sortedCountObject(candidateUseCounts);
+  summary.ownerLifecycleCounts = sortedCountObject(ownerLifecycleCounts);
+  summary.ambiguousOwnerCount = ambiguousOwnerCount;
+  summary.highScoreEmergingCount = highScoreEmergingCount;
+  return summary;
 }
 
 function compactContextOnlyCultureSignal(item) {
@@ -8895,7 +9057,7 @@ function summarizeHumanCultureCandidatesForPlaceMemory(memory = placeMemory, pol
     .sort((a, b) => strongestProtoCultureScore(b.anchor) - strongestProtoCultureScore(a.anchor) || a.anchorRef.localeCompare(b.anchorRef))
     .slice(0, 8)
     .map(compactContextOnlyCultureSignal);
-  return summary;
+  return summarizeHumanCultureCandidateDominance(summary);
 }
 
 function snapshotPlace(anchorOrTarget = {}, source = world, radius = 2) {
@@ -10523,9 +10685,20 @@ function aggregateStrongestExamples(target, source) {
 
 function aggregateHumanCultureCandidateTotals(target, summary = {}) {
   if (!summary) return;
-  target.totalPolitiesWithCandidates += summary.politiesWithCandidates || 0;
-  target.totalLineagesWithCandidates += summary.lineagesWithCandidates || 0;
+  target.totalPolitiesWithCandidates = (target.totalPolitiesWithCandidates || 0) + (summary.politiesWithCandidates || 0);
+  target.totalLineagesWithCandidates = (target.totalLineagesWithCandidates || 0) + (summary.lineagesWithCandidates || 0);
+  target.ambiguousOwnerCount = (target.ambiguousOwnerCount || 0) + (summary.ambiguousOwnerCount || 0);
+  target.highScoreEmergingCount = (target.highScoreEmergingCount || 0) + (summary.highScoreEmergingCount || 0);
+  if (!target.candidateTypeCounts) target.candidateTypeCounts = {};
+  if (!target.dominantCandidateTypeCounts) target.dominantCandidateTypeCounts = {};
+  if (!target.secondaryCandidateTypeCounts) target.secondaryCandidateTypeCounts = {};
+  if (!target.candidateUseCounts) target.candidateUseCounts = {};
+  if (!target.ownerLifecycleCounts) target.ownerLifecycleCounts = {};
   mergeCountObjects(target.candidateTypeCounts, summary.candidateTypeCounts || {});
+  mergeCountObjects(target.dominantCandidateTypeCounts, summary.dominantCandidateTypeCounts || {});
+  mergeCountObjects(target.secondaryCandidateTypeCounts, summary.secondaryCandidateTypeCounts || {});
+  mergeCountObjects(target.candidateUseCounts, summary.candidateUseCounts || {});
+  mergeCountObjects(target.ownerLifecycleCounts, summary.ownerLifecycleCounts || {});
 }
 
 function humanFallbackAuditTargets(source = world) {
@@ -10642,10 +10815,23 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
     anchorTypeWithHintCounts: {},
     nonHumanAnchorWithHints: 0,
     strongestExamplesByHint: Object.fromEntries(Object.values(PROTO_CULTURE_HINTS).map((id) => [id, []])),
+    candidateTypeCounts: {},
+    dominantCandidateTypeCounts: {},
+    secondaryCandidateTypeCounts: {},
+    candidateUseCounts: {},
+    ownerLifecycleCounts: {},
+    ambiguousOwnerCount: 0,
+    highScoreEmergingCount: 0,
     humanCultureCandidateTotals: {
       totalPolitiesWithCandidates: 0,
       totalLineagesWithCandidates: 0,
       candidateTypeCounts: {},
+      dominantCandidateTypeCounts: {},
+      secondaryCandidateTypeCounts: {},
+      candidateUseCounts: {},
+      ownerLifecycleCounts: {},
+      ambiguousOwnerCount: 0,
+      highScoreEmergingCount: 0,
     },
   };
 
@@ -10697,12 +10883,22 @@ function runProtoCultureSummaryAuditForSeedsForTest(options = {}) {
       aggregate.nonHumanAnchorWithHints += run.protoCultureSummary.nonHumanAnchorWithHints || 0;
       aggregateStrongestExamples(aggregate.strongestExamplesByHint, run.protoCultureSummary.strongestExamplesByHint);
       aggregateHumanCultureCandidateTotals(aggregate.humanCultureCandidateTotals, run.humanCultureCandidateSummary);
+      aggregateHumanCultureCandidateTotals(aggregate, run.humanCultureCandidateSummary);
     }
     aggregate.primaryHintCounts = sortedCountObject(aggregate.primaryHintCounts);
     aggregate.stableHintCounts = sortedCountObject(aggregate.stableHintCounts);
     aggregate.activeHintCounts = sortedCountObject(aggregate.activeHintCounts);
     aggregate.anchorTypeWithHintCounts = sortedCountObject(aggregate.anchorTypeWithHintCounts);
     aggregate.humanCultureCandidateTotals.candidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.candidateTypeCounts);
+    aggregate.humanCultureCandidateTotals.dominantCandidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.dominantCandidateTypeCounts);
+    aggregate.humanCultureCandidateTotals.secondaryCandidateTypeCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.secondaryCandidateTypeCounts);
+    aggregate.humanCultureCandidateTotals.candidateUseCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.candidateUseCounts);
+    aggregate.humanCultureCandidateTotals.ownerLifecycleCounts = sortedCountObject(aggregate.humanCultureCandidateTotals.ownerLifecycleCounts);
+    aggregate.candidateTypeCounts = sortedCountObject(aggregate.candidateTypeCounts);
+    aggregate.dominantCandidateTypeCounts = sortedCountObject(aggregate.dominantCandidateTypeCounts);
+    aggregate.secondaryCandidateTypeCounts = sortedCountObject(aggregate.secondaryCandidateTypeCounts);
+    aggregate.candidateUseCounts = sortedCountObject(aggregate.candidateUseCounts);
+    aggregate.ownerLifecycleCounts = sortedCountObject(aggregate.ownerLifecycleCounts);
     return JSON.parse(JSON.stringify({
       version: PROTO_CULTURE_EXPORT_VERSION,
       ticks: ticksToRun,

@@ -76,3 +76,20 @@ Only Human polity or Human lineage ids can own candidate signals. POIs, scars, r
 `humanCultureCandidateSummary` is derived for exports and review. It must not affect lineage, polity, village, outpost, seat, old seat, remnant, ownership detection, proto-culture hint scoring, proto-culture memory updates, wake reports, or any H/B/S ecology rule.
 
 Only `emerging` and `candidate` statuses exist. No civilization module, civilization gameplay effect, AI, resource economy, building layer, NPC, quest, story event, myth event, tarot mechanic, new terrain, or new unit is implemented.
+
+## V0.14C.1 Relation
+
+Human culture candidate summaries classify owner lifecycle for audit readability:
+
+```text
+active/stable/expanding/split/promotable -> active
+pressured/seatless/declining/fading -> at_risk
+collapsed/remnant/abandoned -> legacy
+missing or unexpected -> unknown
+```
+
+`ownerLifecycleClass` and `candidateUse` are export-only interpretation fields.
+
+Collapsed, remnant, and abandoned owners export `legacy` / `legacy_candidate`. They are historical candidate context, not active civilization unlock candidates.
+
+Unknown lifecycle owners use `active_candidate` as a deterministic fallback only. This does not claim current ownership, readiness, or gameplay effect.

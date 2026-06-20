@@ -4985,12 +4985,97 @@ The multi-seed audit aggregate reports compact candidate totals instead of full 
 
 ---
 
+## 72.6 V0.14C.1 Human Culture Candidate Maturity & Dominance Audit
+
+V0.14C.1 refines `humanCultureCandidateSummary` exports with owner lifecycle, candidate use, dominance ranking, evidence summaries, and maturity reasons.
+
+It is observer-only export / audit / readability data.
+
+It does not change Human, Beast, or Spirit movement, lifecycle, conflict, conversion, reproduction, terrain rewriting, fertility balance, POI ecology effects, river blocker behavior, terrain decay, grid size, terrain types, unit types, Explore movement, tick order, map seed behavior, semantic trait derivation, place archetype priority, proto-culture hint scoring, proto-culture memory update rules, Human-related proto-culture gates, V0.14C base candidate scoring, protoCultureSummary counts, or wake report sparsity.
+
+New owner fields:
+
+```text
+ownerLifecycleClass
+dominantCandidate
+secondaryCandidates
+candidateDominance
+topCandidates ordered by dominance ranking
+```
+
+New candidate signal fields:
+
+```text
+candidateUse
+ownerLifecycleClass
+dominanceScore
+evidenceSummary
+maturityReason
+```
+
+Owner lifecycle classes:
+
+```text
+active/stable/expanding/split/promotable -> active
+pressured/seatless/declining/fading -> at_risk
+collapsed/remnant/abandoned -> legacy
+missing or unexpected -> unknown
+```
+
+Candidate use:
+
+```text
+active -> active_candidate
+at_risk -> at_risk_candidate
+legacy -> legacy_candidate
+unknown -> active_candidate deterministic fallback
+```
+
+Dominance rules:
+
+```text
+Each owner has at most one dominantCandidate.
+secondaryCandidates are capped at 3.
+topCandidates are capped at 4.
+dominanceScore is derived for ranking only and does not replace base candidate score.
+Owners are marked ambiguous when the top two dominance scores are close.
+```
+
+Aggregate additions:
+
+```text
+dominantCandidateTypeCounts
+secondaryCandidateTypeCounts
+candidateUseCounts
+ownerLifecycleCounts
+ambiguousOwnerCount
+highScoreEmergingCount
+```
+
+Observer-only limits:
+
+```text
+V0.14C.1 does not unlock civilizations.
+V0.14C.1 does not add civilization gameplay, factions, AI, tarot, story events, myth events, resources, buildings, NPCs, quests, save/load, network calls, new terrain, new units, or multi-screen maps.
+Context-only anchors such as POIs, scars, rivers, forests, Beast ranges, springs, and ordinary places still cannot own Human culture candidates.
+```
+
+Known simplifications:
+
+```text
+Unknown lifecycle owners use active_candidate as a deterministic audit fallback, not as a readiness or unlock claim.
+Evidence summaries count unique exported anchor refs and accumulated proto-culture signal samples; displayed counts report the capped evidence arrays.
+Dominance ranking is compact and deterministic, designed for audit readability rather than gameplay gating.
+```
+
+---
+
 ## 73. Version
 
 ```text
-Rules version: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
-Date: 2026-06-19
-Status: V0.14C Human Culture Candidate Rollup implemented
+Rules version: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
+Date: 2026-06-20
+Status: V0.14C.1 Human Culture Candidate Maturity & Dominance Audit implemented
 ```
 
 Current version split:
@@ -5048,6 +5133,7 @@ Proto-culture hints: TRI_SPECIES_WORLD_SIM_V0.14B_PROTO_CULTURE_HINTS
 Proto-culture readability audit: TRI_SPECIES_WORLD_SIM_V0.14B.1_PROTO_CULTURE_READABILITY_AUDIT
 Explore / river / proto-culture audit usability: TRI_SPECIES_WORLD_SIM_V0.14B.2_EXPLORE_RIVER_PROTOCULTURE_USABILITY
 Human culture candidate rollup: TRI_SPECIES_WORLD_SIM_V0.14C_HUMAN_CULTURE_CANDIDATE_ROLLUP
+Human culture candidate maturity / dominance audit: TRI_SPECIES_WORLD_SIM_V0.14C.1_HUMAN_CULTURE_CANDIDATE_MATURITY_DOMINANCE_AUDIT
 ```
 
 V0.8.3 notes:

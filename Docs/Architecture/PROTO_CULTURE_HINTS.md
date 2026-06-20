@@ -248,6 +248,27 @@ V0.14C does not change `protoCultureHints`, proto-culture scoring, Human-related
 
 V0.14C does not implement civilization modules, civilization gameplay, unlock effects, AI, tarot, story events, myth events, resources, buildings, NPCs, quests, new terrain, new units, save/load, network calls, or multi-screen maps.
 
+## V0.14C.1 Candidate Maturity And Dominance Audit
+
+V0.14C.1 adds maturity and dominance audit fields to `placeMemory.humanCultureCandidateSummary`.
+
+It reads existing `protoCultureMemory` and V0.14C candidate signals, then derives:
+
+```text
+ownerLifecycleClass
+candidateUse
+dominantCandidate
+secondaryCandidates
+candidateDominance
+dominanceScore
+evidenceSummary
+maturityReason
+```
+
+This does not change `protoCultureHints`, proto-culture scoring, Human-related gates, `protoCultureMemory` update rules, semantic traits, place archetypes, wake report sparsity, movement, terrain, units, fertility, POI behavior, river blockers, Explore movement, or any H/B/S ecology rule.
+
+Context-only anchors remain context-only and cannot own Human culture candidates.
+
 ## Future Use
 
 Future civilization modules may read these hints as candidate signals, but V0.14B does not implement civilization modules or gameplay behavior.

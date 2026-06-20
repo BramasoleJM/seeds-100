@@ -198,10 +198,12 @@ Read by: snapshot, recording, lightweight proto-culture summary, current place r
 Mutates simulation: no.
 Observer-only: yes.
 Export shape: version `0.14C`, owner totals, candidate type counts, capped `byPolity`, capped `byLineage`, and capped `contextOnlySignals`.
+V0.14C.1 export fields: owner records include `ownerLifecycleClass`, `dominantCandidate`, `secondaryCandidates`, and `candidateDominance`; candidate signals include `candidateUse`, `ownerLifecycleClass`, `dominanceScore`, `evidenceSummary`, and `maturityReason`.
+V0.14C.1 aggregate fields: `dominantCandidateTypeCounts`, `secondaryCandidateTypeCounts`, `candidateUseCounts`, `ownerLifecycleCounts`, `ambiguousOwnerCount`, and `highScoreEmergingCount`.
 Owner rule: only Human polity ids and Human lineage ids can own candidate signals.
 Context-only rule: POIs, scars, rivers, springs, forests, Beast ranges, and ordinary places can support evidence but cannot create candidates without Human subject evidence.
 Statuses: only `emerging` and `candidate`.
-Future notes: no civilization module or gameplay effect is implemented; do not use this summary to mutate Human identity, proto-culture scoring, ecology, movement, terrain, fertility, POI behavior, river blockers, Explore movement, tick order, or wake report visibility.
+Future notes: no civilization module, dominance unlock, or gameplay effect is implemented; do not use this summary to mutate Human identity, proto-culture scoring, ecology, movement, terrain, fertility, POI behavior, river blockers, Explore movement, tick order, or wake report visibility.
 
 ## PlayerObserver
 

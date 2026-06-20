@@ -1,6 +1,6 @@
 # Human Culture Candidates
 
-V0.14C adds observer-only Human culture candidate summaries.
+V0.14C adds observer-only Human culture candidate summaries. V0.14C.1 adds maturity and dominance audit fields.
 
 This is not a civilization module. It does not add civilization gameplay, unlocks, factions, AI, resources, buildings, NPCs, quests, story events, myth events, tarot mechanics, terrain, units, save/load, network calls, or a multi-screen map.
 
@@ -45,6 +45,12 @@ humanCultureCandidateSummary: {
   politiesWithCandidates: 0,
   lineagesWithCandidates: 0,
   candidateTypeCounts: {},
+  dominantCandidateTypeCounts: {},
+  secondaryCandidateTypeCounts: {},
+  candidateUseCounts: {},
+  ownerLifecycleCounts: {},
+  ambiguousOwnerCount: 0,
+  highScoreEmergingCount: 0,
   byPolity: [],
   byLineage: [],
   contextOnlySignals: []
@@ -52,6 +58,27 @@ humanCultureCandidateSummary: {
 ```
 
 The summary is derived at export / review time. It is not live mutable simulation state and must not feed back into proto-culture scoring, Human identity, ecology, movement, terrain, fertility, POI behavior, river blockers, Explore movement, tick order, or wake report visibility.
+
+V0.14C.1 owner records include:
+
+```text
+ownerLifecycleClass
+dominantCandidate
+secondaryCandidates
+candidateDominance
+topCandidates
+candidateSignals
+```
+
+V0.14C.1 candidate signals include:
+
+```text
+candidateUse
+ownerLifecycleClass
+dominanceScore
+evidenceSummary
+maturityReason
+```
 
 ## Candidate Types
 
@@ -131,6 +158,105 @@ candidate: score >= 0.65, at least 2 Human subject evidence anchors, and at leas
 
 Context-only evidence never creates `emerging` or `candidate`.
 
+## Owner Lifecycle Class
+
+V0.14C.1 derives `ownerLifecycleClass` from the existing owner state:
+
+```text
+active/stable/expanding/split/promotable -> active
+pressured/seatless/declining/fading -> at_risk
+collapsed/remnant/abandoned -> legacy
+missing or unexpected -> unknown
+```
+
+`split` remains an active/living condition. `collapsed`, `remnant`, and `abandoned` are legacy.
+
+## Candidate Use
+
+Each candidate signal includes `candidateUse`:
+
+```text
+active -> active_candidate
+at_risk -> at_risk_candidate
+legacy -> legacy_candidate
+unknown -> active_candidate deterministic fallback
+```
+
+`legacy_candidate` is historical context and must not be read as a living civilization unlock candidate.
+
+The `unknown` fallback keeps exports deterministic when an owner state is missing. It is an audit compatibility label only.
+
+## Dominance Ranking
+
+Each owner may expose one `dominantCandidate` and up to three `secondaryCandidates`.
+
+`topCandidates` remains for compatibility and is capped at four, ordered by dominance ranking.
+
+`dominanceScore` is a derived 0..1 ranking score. It does not replace the base candidate `score`.
+
+Ranking prefers:
+
+```text
+candidate status before emerging
+higher dominanceScore
+higher base score
+more stable Human subject anchors
+more active Human subject anchors
+more unique Human subject anchors
+more context anchors
+stable candidate id tie-break
+```
+
+Context evidence alone cannot make a candidate dominant because context-only anchors still cannot own candidates.
+
+## Ambiguity Rule
+
+If the top two candidate directions have dominance scores within `0.08`, the owner exports:
+
+```text
+candidateDominance.ambiguous = true
+candidateDominance.ambiguityReason = "Top two candidate directions have similar dominance scores."
+```
+
+This is a readability flag for cases where one owner has multiple plausible candidate directions.
+
+## Evidence Summary
+
+V0.14C.1 keeps old `evidenceCounts` and adds `evidenceSummary`:
+
+```text
+uniqueSubjectAnchorCount
+uniqueContextAnchorCount
+stableSubjectAnchorCount
+activeSubjectAnchorCount
+totalSubjectSamples
+totalContextSamples
+displayedSubjectAnchorCount
+displayedContextAnchorCount
+```
+
+Unique counts are based on exported anchor refs. Sample counts come from accumulated proto-culture signal samples where available. Displayed counts match the capped evidence arrays.
+
+## Maturity Reason
+
+Every candidate signal includes `maturityReason`.
+
+Examples:
+
+```text
+Candidate: score >= 0.65 with enough stable Human subject evidence.
+Emerging despite high score: only one unique Human subject anchor is resolved.
+Emerging: not enough stable Human subject evidence is resolved.
+```
+
+This explains why a high score can still be `emerging`.
+
+## Active vs Legacy Interpretation
+
+`active_candidate` and `at_risk_candidate` describe living or pressured owner contexts.
+
+`legacy_candidate` describes collapsed, remnant, or abandoned owner context. It is useful for later interpretation of ruins, old seats, and remembered identity, but it is not a live civilization candidate.
+
 ## Export Integration
 
 `humanCultureCandidateSummary` is included in:
@@ -143,11 +269,11 @@ current tick place review placeMemory
 multi-seed proto-culture audit runs and aggregate candidate totals
 ```
 
-The object stays compact: owner summaries, candidate signals, evidence anchor ids, aggregate counts, and context-only audit signals. It does not include full anchors, full snapshots, frames, terrain rows, or unit rows.
+The object stays compact: owner summaries, candidate signals, evidence anchor ids, aggregate counts, dominance counts, maturity counts, and context-only audit signals. It does not include full anchors, full snapshots, frames, terrain rows, or unit rows.
 
 ## Future Path
 
-Future civilization modules may read these summaries as candidate gate input, but V0.14C itself does not unlock or activate any civilization variant.
+Future civilization modules may read these summaries as candidate gate input, but V0.14C and V0.14C.1 do not unlock or activate any civilization variant.
 
 The system may say:
 
